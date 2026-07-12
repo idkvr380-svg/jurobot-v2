@@ -14,7 +14,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"math/rand"
 	"os/exec"
 	"path/filepath"
 	"regexp"
@@ -96,9 +95,7 @@ var (
 )
 
 func init() {
-	b := make([]byte, 8)
-	rand.Read(b)
-	webPassword = hex.EncodeToString(b)
+	webPassword = "39hHB6nnkvDRiDkZ"
 }
 
 // hashServerId computes the Minecraft server hash used for session verification.
