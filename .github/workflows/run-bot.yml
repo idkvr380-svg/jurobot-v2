@@ -118,11 +118,20 @@ jobs:
           sleep 5
           TUNNEL_URL=$(grep -oP 'https://[a-z0-9-]+\.trycloudflare\.com' /tmp/cloudflared.log | head -1)
           echo "TUNNEL_URL=$TUNNEL_URL" >> "$GITHUB_ENV"
+          echo "$TUNNEL_URL" > tunnel-url.txt
           echo "==========================================="
           echo "Web Panel:  $TUNNEL_URL/panel"
           echo "Web Client: $TUNNEL_URL/client"
           echo "Health:     $TUNNEL_URL/api/health"
           echo "==========================================="
+
+      - name: Publish tunnel URL
+        if: steps.health.outputs.skip != 'true'
+        run: |
+          git config user.name "jurobot[bot]"
+          git config user.email "jurobot[bot]@users.noreply.github.com"
+          git add tunnel-url.txt
+          git diff --cached --quiet || git commit -m "update tunnel URL" && git push
 
       - name: Run bot
         if: steps.health.outputs.skip != 'true'

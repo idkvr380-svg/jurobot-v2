@@ -1,6 +1,8 @@
 let serverUrl = '';
 let panelPassword = '';
 
+const TUNNEL_URL_REPO = 'https://raw.githubusercontent.com/idkvr380-svg/jurobot-v2/main/tunnel-url.txt';
+
 async function init() {
   try {
     if (window.__TAURI_INTERNALS__) {
@@ -11,11 +13,42 @@ async function init() {
         showPanel();
         return;
       }
+      // If password saved but no URL, auto-detect
+      if (config.password) {
+        panelPassword = config.password;
+        document.getElementById('pw').value = config.password;
+        autoDetectUrl();
+        return;
+      }
+    }
+  } catch (e) {}
+  showSetup();
+}
+
+async function autoDetectUrl() {
+  const status = document.getElementById('setup-error');
+  const btn = document.getElementById('detect-btn');
+  status.className = '';
+  status.textContent = 'Fetching tunnel URL from GitHub...';
+  btn.disabled = true;
+
+  try {
+    const res = await fetch(TUNNEL_URL_REPO + '?_=' + Date.now());
+    if (!res.ok) throw new Error('Not found');
+    const url = (await res.text()).trim();
+    if (url && url.startsWith('https://')) {
+      document.getElementById('url').value = url;
+      status.className = '';
+      status.textContent = 'URL detected! Click CONNECT.';
+      btn.disabled = false;
+    } else {
+      throw new Error('Invalid URL');
     }
   } catch (e) {
-    // Tauri not available (running in browser for dev)
+    status.className = '';
+    status.textContent = 'Could not detect URL. Is the bot running?';
+    btn.disabled = false;
   }
-  showSetup();
 }
 
 function showSetup() {
@@ -40,10 +73,12 @@ function showPanel() {
         loadFrame(url);
       } else {
         showError('Bot is not online. Is it running on GitHub Actions?');
+        showSetup();
       }
     })
     .catch(() => {
       showError('Cannot reach server. Check the URL and try again.');
+      showSetup();
     });
 }
 
@@ -82,7 +117,7 @@ async function connect() {
   const pwInput = document.getElementById('pw').value.trim();
 
   if (!urlInput) {
-    showError('Enter the server URL');
+    showError('Enter the server URL or click Detect');
     return;
   }
   if (!pwInput) {
@@ -100,9 +135,7 @@ async function connect() {
         password: panelPassword
       });
     }
-  } catch (e) {
-    // Not in Tauri, just continue
-  }
+  } catch (e) {}
 
   showPanel();
 }

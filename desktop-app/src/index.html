@@ -13,7 +13,10 @@
     <p class="subtitle">Desktop Client</p>
     <div class="form-group">
       <label for="url">Server URL</label>
-      <input type="text" id="url" placeholder="https://xxxx.trycloudflare.com">
+      <div class="url-row">
+        <input type="text" id="url" placeholder="https://xxxx.trycloudflare.com">
+        <button id="detect-btn" class="detect-btn" onclick="autoDetectUrl()">Detect</button>
+      </div>
     </div>
     <div class="form-group">
       <label for="pw">Panel Password</label>
