@@ -1,8 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
-use tauri::Manager;
 
-#[derive(Debug, Serialize, Deserialize, Default)]
+#[derive(Debug, Serialize, Deserialize, Default, Clone)]
 struct Config {
     server_url: String,
     password: String,
