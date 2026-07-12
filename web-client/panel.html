@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Jurobot - Control</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      width: 100%; height: 100%; overflow: hidden;
+      background: #111122;
+      display: flex; justify-content: center; align-items: center;
+      font-family: 'Courier New', monospace;
+      color: #fff;
+    }
+    .container { text-align: center; }
+    h1 {
+      font-size: 52px;
+      margin-bottom: 6px;
+      color: #4fc3f7;
+      text-shadow: 3px 3px 0 #0d47a1;
+      letter-spacing: 6px;
+    }
+    .subtitle {
+      font-size: 13px;
+      color: #556;
+      margin-bottom: 48px;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+    }
+    #control-btn, #release-btn {
+      padding: 22px 72px;
+      font-size: 26px;
+      font-family: 'Courier New', monospace;
+      font-weight: bold;
+      color: #fff;
+      border: 4px solid;
+      cursor: pointer;
+      text-shadow: 2px 2px 0 rgba(0,0,0,0.3);
+      letter-spacing: 4px;
+      transition: all 0.12s;
+      image-rendering: pixelated;
+    }
+    #control-btn {
+      background: linear-gradient(180deg, #4caf50, #2e7d32);
+      border-color: #1b5e20;
+      border-top-color: #66bb6a;
+      border-left-color: #66bb6a;
+    }
+    #control-btn:hover {
+      background: linear-gradient(180deg, #66bb6a, #388e3c);
+      transform: scale(1.04);
+    }
+    #control-btn:active {
+      transform: scale(0.96);
+      border-top-color: #1b5e20;
+      border-left-color: #1b5e20;
+      border-bottom-color: #66bb6a;
+      border-right-color: #66bb6a;
+      background: linear-gradient(180deg, #388e3c, #1b5e20);
+    }
+    #control-btn:disabled {
+      opacity: 0.5;
+      cursor: wait;
+      transform: none;
+    }
+    #release-btn {
+      background: linear-gradient(180deg, #f44336, #b71c1c);
+      border-color: #7f0000;
+      border-top-color: #ef5350;
+      border-left-color: #ef5350;
+    }
+    #release-btn:hover {
+      background: linear-gradient(180deg, #ef5350, #c62828);
+      transform: scale(1.04);
+    }
+    #release-btn:active {
+      transform: scale(0.96);
+    }
+    .hidden { display: none !important; }
+    #status {
+      margin-top: 28px;
+      font-size: 13px;
+      color: #778;
+      min-height: 20px;
+      transition: color 0.3s;
+    }
+    #status.error { color: #f55; }
+    #status.success { color: #4caf50; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>JUROBOT</h1>
+    <p class="subtitle">Bot Control Panel</p>
+    <div id="control-view">
+      <button id="control-btn" onclick="controlBot()">CONTROL BOT</button>
+    </div>
+    <div id="release-view" class="hidden">
+      <button id="release-btn" onclick="releaseBot()">RELEASE CONTROL</button>
+      <p style="margin-top:16px; font-size:12px; color:#666;">You are now controlling the bot in the web client.<br>Click above to release control back to the bot.</p>
+    </div>
+    <p id="status"></p>
+  </div>
+  <script>
+    async function controlBot() {
+      const btn = document.getElementById('control-btn');
+      const status = document.getElementById('status');
+      btn.disabled = true;
+      btn.textContent = 'TAKING OVER...';
+      status.className = '';
+      status.textContent = 'Disconnecting bot...';
+
+      try {
+        const res = await fetch('/client/api/takeover', { method: 'POST' });
+        const data = await res.json();
+        if (data.error) {
+          status.className = 'error';
+          status.textContent = 'Error: ' + data.error;
+          btn.disabled = false;
+          btn.textContent = 'CONTROL BOT';
+          return;
+        }
+        status.textContent = 'Connecting web client...';
+        const proxyUrl = window.location.origin;
+        const serverAddr = data.host + ':' + data.port;
+        const params = new URLSearchParams({
+          autoConnect: '1',
+          ip: serverAddr,
+          proxy: proxyUrl
+        });
+        if (data.username) params.set('username', data.username);
+        window.location.href = '/client-game/?' + params.toString();
+      } catch (e) {
+        status.className = 'error';
+        status.textContent = 'Error: ' + e.message;
+        btn.disabled = false;
+        btn.textContent = 'CONTROL BOT';
+      }
+    }
+
+    async function releaseBot() {
+      const btn = document.getElementById('release-btn');
+      const status = document.getElementById('status');
+      btn.disabled = true;
+      btn.textContent = 'RELEASING...';
+      status.className = '';
+      status.textContent = 'Reconnecting bot...';
+
+      try {
+        const res = await fetch('/client/api/release', { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+          status.className = 'success';
+          status.textContent = 'Bot reconnected! Redirecting...';
+          setTimeout(() => { window.location.href = '/client'; }, 1500);
+        } else {
+          status.className = 'error';
+          status.textContent = 'Release failed';
+          btn.disabled = false;
+          btn.textContent = 'RELEASE CONTROL';
+        }
+      } catch (e) {
+        status.className = 'error';
+        status.textContent = 'Error: ' + e.message;
+        btn.disabled = false;
+        btn.textContent = 'RELEASE CONTROL';
+      }
+    }
+
+    // Check if we're returning from a game session (URL has released=1 param)
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('released') === '1') {
+      document.getElementById('status').className = 'success';
+      document.getElementById('status').textContent = 'Bot reconnected successfully!';
+    }
+  </script>
+</body>
+</html>

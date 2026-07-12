@@ -69,6 +69,7 @@ jobs:
           cd web-client
           npm ci --legacy-peer-deps
           npm run build
+          cp panel.html dist/index.html
           cd ..
 
       - name: Download dependencies
