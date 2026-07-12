@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
+    "postinstall": "node -e \"const f=require('fs'),p='node_modules/minecraft-renderer/dist',v='vendor/minecraft-renderer-index.js';if(f.existsSync(v)&&f.existsSync(p)&&!f.existsSync(p+'/index.js')){f.copyFileSync(v,p+'/index.js')}\"",
     "test": "echo \"Error: no test specified\" && exit 1",
     "build": "rsbuild build && npm run extract-textures",
     "postbuild": "node scripts/fix-workers.cjs",
@@ -18,7 +19,7 @@
     "esbuild": "^0.28.1",
     "mc-assets": "^0.2.83",
     "minecraft-data": "^3.111.0",
-    "minecraft-renderer": "^0.1.79",
+    "minecraft-renderer": "0.1.79",
     "prismarine-chunk": "^1.40.0",
     "prismarine-registry": "^1.12.0",
     "prismarine-world": "^3.7.0",
