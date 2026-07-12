@@ -401,6 +401,7 @@ func (c *Client) finishAuth(ctx context.Context, ld auth.LoginData) error {
 	if err != nil {
 		return fmt.Errorf("fetch certificate: %w", err)
 	}
+	c.MojangCert = cert
 
 	c.ChatSigner = chat.NewChatSigner()
 	c.ChatSigner.SetKeys(cert.PrivateKey, cert.PublicKey)

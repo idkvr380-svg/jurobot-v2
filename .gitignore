@@ -3,3 +3,9 @@ secrets.md
 *.pem
 credentials.json
 tunnel-credentials.json
+jurobot
+web-client/node_modules/
+web-client/package-lock.json
+web-client/dist/
+web-client/in-game-dist/
+minecraft-web-client/

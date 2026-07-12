@@ -45,6 +45,7 @@ type Client struct {
 
 	// auth/session (populated during connect)
 	LoginData     auth.LoginData
+	MojangCert    *auth.MojangCertificateData
 	SessionClient *session_server.SessionServerClient
 	ChatSigner    *chat.ChatSigner
 

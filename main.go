@@ -2,6 +2,9 @@ package main
 
 import (
 	"context"
+	"crypto/sha1"
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -23,12 +26,14 @@ import (
 	"github.com/go-mclib/data/pkg/data/items"
 	"github.com/go-mclib/data/pkg/data/packet_ids"
 	"github.com/go-mclib/data/pkg/packets"
+	"github.com/gorilla/websocket"
 	jp "github.com/go-mclib/protocol/java_protocol"
 	"jurobot/commands"
 	"jurobot/pkg/chat"
 	"jurobot/pkg/client"
 	modchat "jurobot/pkg/client/modules/chat"
 	"jurobot/pkg/client/modules/inventory"
+	"jurobot/pkg/client/modules/physics"
 	"jurobot/pkg/client/modules/playerlist"
 	"jurobot/pkg/client/modules/self"
 	"jurobot/pkg/client/modules/world"
@@ -80,6 +85,75 @@ var (
 type LogEntry struct {
 	Time    string `json:"time"`
 	Message string `json:"message"`
+}
+
+var (
+	inTakeover  bool
+	takeoverMu  sync.Mutex
+	httpPort    int
+)
+
+// hashServerId computes the Minecraft server hash used for session verification.
+func hashServerId(serverId string, sharedSecret, publicKey []byte) string {
+	h := sha1.New()
+	h.Write([]byte(serverId))
+	h.Write(sharedSecret)
+	h.Write(publicKey)
+	digest := h.Sum(nil)
+
+	negative := (digest[0] & 0x80) != 0
+	if negative {
+		digest = twosComplement(digest)
+	}
+	res := strings.TrimLeft(hex.EncodeToString(digest), "0")
+	if res == "" {
+		res = "0"
+	}
+	if negative {
+		res = "-" + res
+	}
+	return res
+}
+
+func twosComplement(p []byte) []byte {
+	p = append([]byte(nil), p...)
+	carry := true
+	for i := len(p) - 1; i >= 0; i-- {
+		p[i] = ^p[i]
+		if carry {
+			carry = p[i] == 0xff
+			p[i]++
+		}
+	}
+	return p
+}
+
+func extractBytesFromJSON(v interface{}) ([]byte, bool) {
+	switch val := v.(type) {
+	case []interface{}:
+		out := make([]byte, len(val))
+		for i, item := range val {
+			if f, ok := item.(float64); ok {
+				out[i] = byte(f)
+			}
+		}
+		return out, true
+	case map[string]interface{}:
+		if data, ok := val["data"]; ok {
+			return extractBytesFromJSON(data)
+		}
+	}
+	return nil, false
+}
+
+type manualControlState struct {
+	mu       sync.Mutex
+	enabled  bool
+	forward  float64
+	strafe   float64
+	jumping  bool
+	sneaking bool
+	sprinting bool
 }
 
 func main() {
@@ -786,6 +860,32 @@ func startHeadlessAPI(c *client.Client, f *helpers.Flags, h *CommandHandler, sor
 		}
 	})
 
+	// ── Manual control (client panel) ──
+	manualCtrl := &manualControlState{}
+
+	phys := physics.From(c)
+	if phys != nil {
+		phys.OnTick(func() {
+			manualCtrl.mu.Lock()
+			enabled := manualCtrl.enabled
+			forward := manualCtrl.forward
+			strafe := manualCtrl.strafe
+			jumping := manualCtrl.jumping
+			sneaking := manualCtrl.sneaking
+			sprinting := manualCtrl.sprinting
+			manualCtrl.mu.Unlock()
+
+			if enabled {
+				phys.SetInput(forward, strafe, jumping)
+				s := self.From(c)
+				if s != nil {
+					s.SetSneaking(sneaking)
+					s.SetSprinting(sprinting)
+				}
+			}
+		})
+	}
+
 	http.HandleFunc("/api/clear", func(w http.ResponseWriter, r *http.Request) {
 		logsMu.Lock()
 		consoleLogs = nil
@@ -1119,6 +1219,538 @@ func startHeadlessAPI(c *client.Client, f *helpers.Flags, h *CommandHandler, sor
 	})
 
 	http.HandleFunc("/ws", handleWS(c))
+
+	// ── Client API: manual control state ──
+	http.HandleFunc("/client/api/state", func(w http.ResponseWriter, r *http.Request) {
+		manualCtrl.mu.Lock()
+		enabled := manualCtrl.enabled
+		forward := manualCtrl.forward
+		strafe := manualCtrl.strafe
+		jumping := manualCtrl.jumping
+		sneaking := manualCtrl.sneaking
+		sprinting := manualCtrl.sprinting
+		manualCtrl.mu.Unlock()
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"enabled":   enabled,
+			"forward":   forward,
+			"strafe":    strafe,
+			"jump":      jumping,
+			"sneaking":  sneaking,
+			"sprinting": sprinting,
+		})
+	})
+
+	http.HandleFunc("/client/api/override", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		var body struct {
+			Enabled bool `json:"enabled"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			http.Error(w, "Bad request", http.StatusBadRequest)
+			return
+		}
+		manualCtrl.mu.Lock()
+		manualCtrl.enabled = body.Enabled
+		if !body.Enabled {
+			manualCtrl.forward = 0
+			manualCtrl.strafe = 0
+			manualCtrl.jumping = false
+			manualCtrl.sneaking = false
+			manualCtrl.sprinting = false
+		}
+		manualCtrl.mu.Unlock()
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]bool{"success": true})
+	})
+
+	http.HandleFunc("/client/api/move", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		var body struct {
+			Forward   float64 `json:"forward"`
+			Strafe    float64 `json:"strafe"`
+			Jump      bool    `json:"jump"`
+			Sneaking  bool    `json:"sneaking"`
+			Sprinting bool    `json:"sprinting"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			http.Error(w, "Bad request", http.StatusBadRequest)
+			return
+		}
+		manualCtrl.mu.Lock()
+		manualCtrl.forward = body.Forward
+		manualCtrl.strafe = body.Strafe
+		manualCtrl.jumping = body.Jump
+		manualCtrl.sneaking = body.Sneaking
+		manualCtrl.sprinting = body.Sprinting
+		manualCtrl.mu.Unlock()
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]bool{"success": true})
+	})
+
+	http.HandleFunc("/client/api/action", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		var body struct {
+			Action string `json:"action"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			http.Error(w, "Bad request", http.StatusBadRequest)
+			return
+		}
+
+		s := self.From(c)
+		var err error
+		switch body.Action {
+		case "swing":
+			err = c.SwingArm(0)
+		case "use":
+			err = s.Use(0)
+		case "swap":
+			err = c.SwapItemInHands()
+		case "drop":
+			err = c.DropItem(false)
+		default:
+			http.Error(w, "Unknown action", http.StatusBadRequest)
+			return
+		}
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]bool{"success": true})
+	})
+
+	http.HandleFunc("/client/api/rotate", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		var body struct {
+			DeltaYaw   float64 `json:"deltaYaw"`
+			DeltaPitch float64 `json:"deltaPitch"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			http.Error(w, "Bad request", http.StatusBadRequest)
+			return
+		}
+
+		s := self.From(c)
+		s.Rotate(body.DeltaYaw, body.DeltaPitch)
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]bool{"success": true})
+	})
+
+	// ── WebSocket-to-TCP proxy for minecraft-web-client ──
+	proxyConns := make(map[string]net.Conn)
+	var proxyConnsMu sync.Mutex
+
+	http.HandleFunc("/api/vm/net/connect", func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		c.Logger.Printf("[PROXY] %s /api/vm/net/connect body=%q", r.Method, string(body))
+
+		w.Header().Set("Content-Type", "application/json")
+
+		if r.Method == http.MethodGet {
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"capabilities": map[string]interface{}{
+					"authEndpoint":    "/api/vm/net/auth",
+					"sessionEndpoint": "/api/vm/net/session/join",
+				},
+			})
+			return
+		}
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		var opts struct {
+			Host string      `json:"host"`
+			Port interface{} `json:"port"`
+		}
+		if err := json.Unmarshal(body, &opts); err != nil {
+			c.Logger.Printf("[PROXY] JSON decode error: %v body=%q", err, string(body))
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{"error": "Bad request"})
+			return
+		}
+
+		port := 25565
+		switch v := opts.Port.(type) {
+		case float64:
+			port = int(v)
+		case int:
+			port = v
+		case string:
+			fmt.Sscanf(v, "%d", &port)
+		}
+		if opts.Host == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{"error": "Missing host"})
+			return
+		}
+
+		opts.Host = strings.TrimRight(opts.Host, ".")
+		addr := fmt.Sprintf("%s:%d", opts.Host, port)
+		c.Logger.Printf("[PROXY] Connecting to %s", addr)
+		conn, err := net.DialTimeout("tcp", addr, 10*time.Second)
+		if err != nil {
+			c.Logger.Printf("[PROXY] Failed to connect to %s: %v", addr, err)
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"error": map[string]string{"code": err.Error()},
+			})
+			return
+		}
+		token := fmt.Sprintf("%x", time.Now().UnixNano())
+		proxyConnsMu.Lock()
+		proxyConns[token] = conn
+		proxyConnsMu.Unlock()
+		go func() {
+			time.Sleep(60 * time.Second)
+			proxyConnsMu.Lock()
+			if pc, ok := proxyConns[token]; ok {
+				pc.Close()
+				delete(proxyConns, token)
+			}
+			proxyConnsMu.Unlock()
+		}()
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"token": token,
+			"remote": map[string]interface{}{
+				"address": opts.Host,
+				"family":  "IPv4",
+				"port":    port,
+			},
+		})
+	})
+
+	http.HandleFunc("/api/vm/net/auth", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		body, _ := io.ReadAll(r.Body)
+		c.Logger.Printf("[AUTH] POST /api/vm/net/auth body=%q", string(body))
+
+		if c.MojangCert == nil || c.MojangCert.Certificate == nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusServiceUnavailable)
+			json.NewEncoder(w).Encode(map[string]string{"error": "Bot has no Mojang certificate (offline mode?)"})
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/x-ndjson")
+		w.Header().Set("Transfer-Encoding", "chunked")
+		flusher, canFlush := w.(http.Flusher)
+
+		cert := c.MojangCert.Certificate
+
+		nodeBufferJSON := func(b64 string) map[string]interface{} {
+			decoded, err := base64.StdEncoding.DecodeString(b64)
+			if err != nil {
+				return nil
+			}
+			bytes := make([]interface{}, len(decoded))
+			for i, b := range decoded {
+				bytes[i] = b
+			}
+			return map[string]interface{}{"type": "Buffer", "data": bytes}
+		}
+
+		resp := map[string]interface{}{
+			"token": c.LoginData.AccessToken,
+			"profile": map[string]string{
+				"id":   c.LoginData.UUID,
+				"name": c.LoginData.Username,
+			},
+			"entitlements": map[string]interface{}{
+				"items": []map[string]string{
+					{"name": "game_minecraft"},
+				},
+			},
+			"certificates": map[string]interface{}{
+				"profileKeys": map[string]interface{}{
+					"publicPEM":    cert.KeyPair.PublicKey,
+					"privatePEM":   cert.KeyPair.PrivateKey,
+					"signature":    nodeBufferJSON(cert.PublicKeySignature),
+					"signatureV2":  nodeBufferJSON(cert.PublicKeySignatureV2),
+					"expiresOn":    cert.ExpiresAt,
+					"refreshAfter": cert.RefreshedAfter,
+				},
+			},
+		}
+
+		data, _ := json.Marshal(resp)
+		w.Write(data)
+		w.Write([]byte("\n\n"))
+		if canFlush {
+			flusher.Flush()
+		}
+		c.Logger.Printf("[AUTH] Returned token+profile+certs for %s", c.LoginData.Username)
+	})
+
+	http.HandleFunc("/api/vm/net/session/join", func(w http.ResponseWriter, r *http.Request) {
+		c.Logger.Printf("[SESSION] %s /api/vm/net/session/join", r.Method)
+		body, _ := io.ReadAll(r.Body)
+		c.Logger.Printf("[SESSION] raw body=%s", string(body))
+
+		var raw map[string]interface{}
+		if err := json.Unmarshal(body, &raw); err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{"error": "Invalid JSON"})
+			return
+		}
+
+		serverId, _ := raw["serverId"].(string)
+		var sharedSecret, publicKey []byte
+		if ss, ok := raw["sharedSecret"]; ok {
+			sharedSecret, _ = extractBytesFromJSON(ss)
+		}
+		if pk, ok := raw["publicKey"]; ok {
+			publicKey, _ = extractBytesFromJSON(pk)
+		}
+
+		if len(sharedSecret) > 0 && len(publicKey) > 0 {
+			computedHash := hashServerId(serverId, sharedSecret, publicKey)
+			c.Logger.Printf("[SESSION] raw serverId=%q, computed hash=%q", serverId, computedHash)
+			raw["serverId"] = computedHash
+		} else {
+			c.Logger.Printf("[SESSION] WARNING: could not extract sharedSecret/publicKey, forwarding raw serverId=%q", serverId)
+		}
+
+		delete(raw, "sharedSecret")
+		delete(raw, "publicKey")
+
+		fixedBody, _ := json.Marshal(raw)
+		c.Logger.Printf("[SESSION] forwarding to Mojang: %s", string(fixedBody))
+
+		req, err := http.NewRequest(http.MethodPost, "https://sessionserver.mojang.com/session/minecraft/join", strings.NewReader(string(fixedBody)))
+		if err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+			return
+		}
+		req.Header.Set("Content-Type", "application/json")
+
+		client := &http.Client{Timeout: 10 * time.Second}
+		mojangResp, err := client.Do(req)
+		if err != nil {
+			c.Logger.Printf("[SESSION] Mojang join proxy error: %v", err)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadGateway)
+			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+			return
+		}
+		defer mojangResp.Body.Close()
+		respBody, _ := io.ReadAll(mojangResp.Body)
+		c.Logger.Printf("[SESSION] Mojang join response: status=%d body=%s", mojangResp.StatusCode, string(respBody))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(mojangResp.StatusCode)
+		w.Write(respBody)
+	})
+
+	http.HandleFunc("/api/vm/net/session", func(w http.ResponseWriter, r *http.Request) {
+		c.Logger.Printf("[SESSION] %s /api/vm/net/session (fallback)", r.Method)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{})
+	})
+
+	http.HandleFunc("/api/vm/net/socket", func(w http.ResponseWriter, r *http.Request) {
+		token := r.URL.Query().Get("token")
+		if token == "" {
+			http.Error(w, "Missing token", http.StatusBadRequest)
+			return
+		}
+		proxyConnsMu.Lock()
+		tcpConn, ok := proxyConns[token]
+		if ok {
+			delete(proxyConns, token)
+		}
+		proxyConnsMu.Unlock()
+		if !ok {
+			http.Error(w, "Invalid or expired token", http.StatusBadRequest)
+			return
+		}
+		wsConn, err := wsUpgrader.Upgrade(w, r, nil)
+		if err != nil {
+			tcpConn.Close()
+			return
+		}
+		c.Logger.Printf("[PROXY] WebSocket tunnel established for %s", tcpConn.RemoteAddr())
+		defer func() {
+			wsConn.Close()
+			tcpConn.Close()
+			c.Logger.Printf("[PROXY] Tunnel closed for %s", tcpConn.RemoteAddr())
+		}()
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			buf := make([]byte, 65536)
+			for {
+				n, err := tcpConn.Read(buf)
+				if err != nil {
+					return
+				}
+				if err := wsConn.WriteMessage(websocket.BinaryMessage, buf[:n]); err != nil {
+					return
+				}
+			}
+		}()
+		for {
+			msgType, msg, err := wsConn.ReadMessage()
+			if err != nil {
+				break
+			}
+			if msgType == websocket.TextMessage {
+				text := string(msg)
+				if strings.HasPrefix(text, "ping:") {
+					wsConn.WriteMessage(websocket.TextMessage, []byte("pong:"+text[5:]))
+				}
+				continue
+			}
+			if _, err := tcpConn.Write(msg); err != nil {
+				break
+			}
+		}
+		<-done
+	})
+
+	// ── Takeover endpoint: disconnect bot so web client can connect ──
+	http.HandleFunc("/client/api/takeover", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		takeoverMu.Lock()
+		inTakeover = true
+		takeoverMu.Unlock()
+		c.Logger.Printf("[TAKEOVER] Bot takeover requested, disconnecting from server")
+		c.Disconnect(true)
+		serverAddr := appCfg.Server.Address
+		serverPort := appCfg.Server.Port
+		if serverPort == 0 {
+			serverPort = 25565
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"host":     serverAddr,
+			"port":     serverPort,
+			"username": c.Username,
+		})
+	})
+
+	// ── Release endpoint: reconnect bot after web client is done ──
+	http.HandleFunc("/client/api/release", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		takeoverMu.Lock()
+		if !inTakeover {
+			takeoverMu.Unlock()
+			c.Logger.Printf("[RELEASE] Already released, ignoring duplicate request")
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]bool{"success": true})
+			return
+		}
+		inTakeover = false
+		takeoverMu.Unlock()
+		proxyConnsMu.Lock()
+		for token, conn := range proxyConns {
+			conn.Close()
+			delete(proxyConns, token)
+			c.Logger.Printf("[RELEASE] Closed proxy connection %s", token)
+		}
+		proxyConnsMu.Unlock()
+		c.Logger.Printf("[RELEASE] Reconnecting bot to server")
+		go func() {
+			c.ConnectAndStart(context.Background())
+		}()
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]bool{"success": true})
+	})
+
+	// ── Dynamic config for in-game client ──
+	http.HandleFunc("/client-game/config.json", func(w http.ResponseWriter, r *http.Request) {
+		proxyURL := fmt.Sprintf("http://localhost:%d", httpPort)
+		serverHost := appCfg.Server.Address
+		serverPort := appCfg.Server.Port
+		if serverPort == 0 {
+			serverPort = 25565
+		}
+		cfg := map[string]interface{}{
+			"version":           1,
+			"allowAutoConnect":  true,
+			"defaultHost":       fmt.Sprintf("%s:%d", serverHost, serverPort),
+			"defaultProxy":      proxyURL,
+			"skinTexturesProxy": "",
+			"peerJsServer":      "",
+			"promoteServers":    []interface{}{},
+			"rightSideText":     "Jurobot Web Client",
+			"splashText":        "Control your bot from the browser!",
+			"splashTextFallback": "Welcome!",
+			"mobileButtons":     []interface{}{},
+			"wasmMesher":        false,
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(cfg)
+	})
+
+	// ── Static file serving for web client ──
+	gameClientHandler := http.StripPrefix("/client-game/", http.FileServer(http.Dir("web-client/in-game-dist")))
+	http.HandleFunc("/client-game/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cross-Origin-Opener-Policy", "same-origin")
+		w.Header().Set("Cross-Origin-Embedder-Policy", "require-corp")
+		w.Header().Set("Cross-Origin-Resource-Policy", "cross-origin")
+		gameClientHandler.ServeHTTP(w, r)
+	})
+	http.HandleFunc("/client-game", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/client-game/", http.StatusMovedPermanently)
+	})
+
+	clientHandler := http.StripPrefix("/client/", http.FileServer(http.Dir("web-client/dist")))
+	http.HandleFunc("/client/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cross-Origin-Opener-Policy", "same-origin")
+		w.Header().Set("Cross-Origin-Embedder-Policy", "require-corp")
+		clientHandler.ServeHTTP(w, r)
+	})
+	http.HandleFunc("/client", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cross-Origin-Opener-Policy", "same-origin")
+		w.Header().Set("Cross-Origin-Embedder-Policy", "require-corp")
+		http.ServeFile(w, r, "web-client/dist/index.html")
+	})
+
+	mcAssetsHandler := http.StripPrefix("/mc-assets/", http.FileServer(http.Dir("web-client/mc-assets")))
+	http.Handle("/mc-assets/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cross-Origin-Resource-Policy", "cross-origin")
+		mcAssetsHandler.ServeHTTP(w, r)
+	}))
+
+	staticHandler := http.FileServer(http.Dir("web-client/dist"))
+	http.Handle("/static/", staticHandler)
+	http.Handle("/mesher.js", staticHandler)
+	http.Handle("/threeWorker.js", staticHandler)
+	http.Handle("/mesherWasm.js", staticHandler)
+
 	http.HandleFunc("/apis", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		endpoints := []string{
@@ -1136,6 +1768,12 @@ func startHeadlessAPI(c *client.Client, f *helpers.Flags, h *CommandHandler, sor
 			"/api/echest - Open nearest ender chest and list contents",
 			"/api/clear - Clear log buffer",
 			"/api/command - Execute internal bot commands (POST)",
+			"/client - In-game manual control (Minecraft renderer)",
+			"/client/api/state - Manual control state",
+			"/client/api/override - Toggle manual override (POST)",
+			"/client/api/move - Set movement input (POST)",
+			"/client/api/action - Perform an action (POST)",
+			"/client/api/rotate - Rotate the bot (POST)",
 			"/apis - This list",
 		}
 		for _, e := range endpoints {
@@ -1149,6 +1787,7 @@ func startHeadlessAPI(c *client.Client, f *helpers.Flags, h *CommandHandler, sor
 			addr := fmt.Sprintf(":%d", port)
 			l, err := net.Listen("tcp", addr)
 			if err == nil {
+				httpPort = port
 				if port != 5050 {
 					c.Logger.Printf("port 5050 in use, using %s instead", addr)
 				}
@@ -1158,7 +1797,7 @@ func startHeadlessAPI(c *client.Client, f *helpers.Flags, h *CommandHandler, sor
 				return
 			}
 		}
-		c.Logger.Printf("failed to start API server: no free port found in range 3000-3010")
+		c.Logger.Printf("failed to start API server: no free port found in range 5050-5060")
 	}()
 }
 

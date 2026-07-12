@@ -57,6 +57,20 @@ jobs:
         with:
           go-version: '1.25'
 
+      - name: Setup Node.js
+        if: steps.health.outputs.skip != 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build web client
+        if: steps.health.outputs.skip != 'true'
+        run: |
+          cd web-client
+          npm install
+          npm run build
+          cd ..
+
       - name: Download dependencies
         if: steps.health.outputs.skip != 'true'
         run: go mod download
@@ -99,18 +113,15 @@ jobs:
       - name: Start cloudflared tunnel
         if: steps.health.outputs.skip != 'true'
         run: |
-          mkdir -p /home/runner/.cloudflared
-          echo '${{ secrets.TUNNEL_CREDENTIALS }}' > /home/runner/.cloudflared/dde4ddcb-208b-4ea4-af64-cb3c1ec1f5ae.json
-          printf '%s\n' \
-            "tunnel: dde4ddcb-208b-4ea4-af64-cb3c1ec1f5ae" \
-            "credentials-file: /home/runner/.cloudflared/dde4ddcb-208b-4ea4-af64-cb3c1ec1f5ae.json" \
-            "ingress:" \
-            "  - hostname: cloud.juro5000.me" \
-            "    service: http://localhost:5050" \
-            "  - service: http_status:404" > /tmp/tunnel-config.yml
-          nohup cloudflared tunnel --config /tmp/tunnel-config.yml run > /tmp/cloudflared.log 2>&1 &
-          sleep 3
-          echo "cloudflared started"
+          nohup cloudflared tunnel --url http://localhost:5050 > /tmp/cloudflared.log 2>&1 &
+          sleep 5
+          TUNNEL_URL=$(grep -oP 'https://[a-z0-9-]+\.trycloudflare\.com' /tmp/cloudflared.log | head -1)
+          echo "TUNNEL_URL=$TUNNEL_URL" >> "$GITHUB_ENV"
+          echo "==========================================="
+          echo "Web Panel:  $TUNNEL_URL/panel"
+          echo "Web Client: $TUNNEL_URL/client"
+          echo "Health:     $TUNNEL_URL/api/health"
+          echo "==========================================="
 
       - name: Run bot
         if: steps.health.outputs.skip != 'true'
