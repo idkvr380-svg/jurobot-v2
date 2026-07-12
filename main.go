@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"math/rand"
 	"os/exec"
 	"path/filepath"
 	"regexp"
@@ -91,7 +92,14 @@ var (
 	inTakeover  bool
 	takeoverMu  sync.Mutex
 	httpPort    int
+	webPassword string
 )
+
+func init() {
+	b := make([]byte, 8)
+	rand.Read(b)
+	webPassword = hex.EncodeToString(b)
+}
 
 // hashServerId computes the Minecraft server hash used for session verification.
 func hashServerId(serverId string, sharedSecret, publicKey []byte) string {
@@ -757,6 +765,58 @@ func logToConsole(message string) {
 	}
 }
 
+func loginPageHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodPost {
+		r.ParseForm()
+		if r.FormValue("pw") == webPassword {
+			http.SetCookie(w, &http.Cookie{
+				Name:     "jurobot_auth",
+				Value:    webPassword,
+				Path:     "/",
+				MaxAge:   86400 * 30,
+				HttpOnly: true,
+			})
+			redirect := r.FormValue("r")
+			if redirect == "" {
+				redirect = "/client"
+			}
+			http.Redirect(w, r, redirect, http.StatusFound)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Fprint(w, `<!DOCTYPE html><html><head><title>Login Failed</title><style>
+			body{background:#111;color:#eee;font-family:monospace;display:flex;justify-content:center;align-items:center;height:100vh;margin:0}
+			.box{text-align:center;background:#1a1a2e;padding:40px;border-radius:8px;border:2px solid #333}
+			input{background:#333;border:1px solid #555;color:#fff;padding:10px;border-radius:4px;width:250px;margin:10px 0}
+			button{background:#f44336;border:none;color:#fff;padding:10px 30px;border-radius:4px;cursor:pointer;font-weight:bold}
+			button:hover{background:#d32f2f}
+			.err{color:#f44; margin-bottom:10px}
+		</style></head><body><div class="box">
+			<p class="err">Wrong password</p>
+			<form method="POST"><input type="hidden" name="r" value="`+html.EscapeString(r.FormValue("r"))+`">
+			<input type="password" name="pw" placeholder="Password" autofocus>
+			<br><button type="submit">LOGIN</button></form>
+		</div></body></html>`)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	redirect := r.URL.Query().Get("r")
+	fmt.Fprint(w, `<!DOCTYPE html><html><head><title>JuroBot Login</title><style>
+		body{background:#111;color:#eee;font-family:monospace;display:flex;justify-content:center;align-items:center;height:100vh;margin:0}
+		.box{text-align:center;background:#1a1a2e;padding:40px;border-radius:8px;border:2px solid #333}
+		h1{color:#4fc3f7;margin-bottom:20px}
+		input{background:#333;border:1px solid #555;color:#fff;padding:10px;border-radius:4px;width:250px;margin:10px 0}
+		button{background:#4caf50;border:none;color:#fff;padding:10px 30px;border-radius:4px;cursor:pointer;font-weight:bold}
+		button:hover{background:#388e3c}
+	</style></head><body><div class="box">
+		<h1>JUROBOT</h1>
+		<form method="POST"><input type="hidden" name="r" value="`+html.EscapeString(redirect)+`">
+		<input type="password" name="pw" placeholder="Password" autofocus>
+		<br><button type="submit">LOGIN</button></form>
+	</div></body></html>`)
+}
+
 func startHeadlessAPI(c *client.Client, f *helpers.Flags, h *CommandHandler, sorter *plugins.SorterPlugin, con *console.Console) {
 	c.Logger.SetOutput(&logRedirector{original: os.Stdout, con: con})
 
@@ -885,6 +945,21 @@ func startHeadlessAPI(c *client.Client, f *helpers.Flags, h *CommandHandler, sor
 			}
 		})
 	}
+
+	// ── Login page (no auth required) ──
+	http.HandleFunc("/login", loginPageHandler)
+
+	// ── Wrap all routes with auth ──
+	authMux := http.NewServeMux()
+	authMux.HandleFunc("/login", loginPageHandler)
+	authMux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		cookie, err := r.Cookie("jurobot_auth")
+		if err != nil || cookie.Value != webPassword {
+			http.Redirect(w, r, "/login?r="+url.QueryEscape(r.URL.Path), http.StatusFound)
+			return
+		}
+		http.DefaultServeMux.ServeHTTP(w, r)
+	}))
 
 	http.HandleFunc("/api/clear", func(w http.ResponseWriter, r *http.Request) {
 		logsMu.Lock()
@@ -1791,7 +1866,8 @@ func startHeadlessAPI(c *client.Client, f *helpers.Flags, h *CommandHandler, sor
 				if port != 5050 {
 					c.Logger.Printf("port 5050 in use, using %s instead", addr)
 				}
-				if err := http.Serve(l, nil); err != nil {
+				c.Logger.Printf("WEB PASSWORD: %s", webPassword)
+				if err := http.Serve(l, authMux); err != nil {
 					c.Logger.Printf("API Server error on %s: %v", addr, err)
 				}
 				return
