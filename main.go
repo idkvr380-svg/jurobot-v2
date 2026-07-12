@@ -782,35 +782,35 @@ func loginPageHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.WriteHeader(http.StatusUnauthorized)
-		fmt.Fprint(w, `<!DOCTYPE html><html><head><title>Login Failed</title><style>
+		fmt.Fprint(w, `<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"><title>Login Failed</title><style>
 			body{background:#111;color:#eee;font-family:monospace;display:flex;justify-content:center;align-items:center;height:100vh;margin:0}
-			.box{text-align:center;background:#1a1a2e;padding:40px;border-radius:8px;border:2px solid #333}
-			input{background:#333;border:1px solid #555;color:#fff;padding:10px;border-radius:4px;width:250px;margin:10px 0}
-			button{background:#f44336;border:none;color:#fff;padding:10px 30px;border-radius:4px;cursor:pointer;font-weight:bold}
+			.box{text-align:center;background:#1a1a2e;padding:40px;border-radius:8px;border:2px solid #333;width:90%;max-width:400px}
+			input{background:#333;border:1px solid #555;color:#fff;padding:10px;border-radius:4px;width:100%;margin:10px 0;font-size:16px}
+			button{background:#f44336;border:none;color:#fff;padding:10px 30px;border-radius:4px;cursor:pointer;font-weight:bold;width:100%;margin-top:10px}
 			button:hover{background:#d32f2f}
 			.err{color:#f44; margin-bottom:10px}
 		</style></head><body><div class="box">
 			<p class="err">Wrong password</p>
 			<form method="POST"><input type="hidden" name="r" value="`+html.EscapeString(r.FormValue("r"))+`">
 			<input type="password" name="pw" placeholder="Password" autofocus>
-			<br><button type="submit">LOGIN</button></form>
+			<button type="submit">LOGIN</button></form>
 		</div></body></html>`)
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	redirect := r.URL.Query().Get("r")
-	fmt.Fprint(w, `<!DOCTYPE html><html><head><title>JuroBot Login</title><style>
+		fmt.Fprint(w, `<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"><title>JuroBot Login</title><style>
 		body{background:#111;color:#eee;font-family:monospace;display:flex;justify-content:center;align-items:center;height:100vh;margin:0}
-		.box{text-align:center;background:#1a1a2e;padding:40px;border-radius:8px;border:2px solid #333}
+		.box{text-align:center;background:#1a1a2e;padding:40px;border-radius:8px;border:2px solid #333;width:90%;max-width:400px}
 		h1{color:#4fc3f7;margin-bottom:20px}
-		input{background:#333;border:1px solid #555;color:#fff;padding:10px;border-radius:4px;width:250px;margin:10px 0}
-		button{background:#4caf50;border:none;color:#fff;padding:10px 30px;border-radius:4px;cursor:pointer;font-weight:bold}
+		input{background:#333;border:1px solid #555;color:#fff;padding:10px;border-radius:4px;width:100%;margin:10px 0;font-size:16px}
+		button{background:#4caf50;border:none;color:#fff;padding:10px 30px;border-radius:4px;cursor:pointer;font-weight:bold;width:100%;margin-top:10px}
 		button:hover{background:#388e3c}
 	</style></head><body><div class="box">
 		<h1>JUROBOT</h1>
 		<form method="POST"><input type="hidden" name="r" value="`+html.EscapeString(redirect)+`">
 		<input type="password" name="pw" placeholder="Password" autofocus>
-		<br><button type="submit">LOGIN</button></form>
+		<button type="submit">LOGIN</button></form>
 	</div></body></html>`)
 }
 
@@ -968,9 +968,9 @@ func startHeadlessAPI(c *client.Client, f *helpers.Flags, h *CommandHandler, sor
 
 	http.HandleFunc("/panel", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		fmt.Fprint(w, `<!DOCTYPE html><html><head><title>JuroBot Panel v2.1</title><style>`+WebCSS+`</style></head><body>
-			<div style="margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center;">
-				<h1 style="margin:0; color:#4caf50;">JuroBot <span style="font-size:0.5em; color:#666;">v2.1</span></h1>
+		fmt.Fprint(w, `<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"><title>JuroBot Panel v2.1</title><style>`+WebCSS+`</style></head><body>
+			<div style="margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+				<h1 style="margin:0; color:#4caf50; font-size: clamp(20px, 5vw, 32px);">JuroBot <span style="font-size:0.5em; color:#666;">v2.1</span></h1>
 				<button onclick="clearLogs()" style="background:#f44336;">Clear Logs</button>
 			</div>
 			<div class="tab-container">
@@ -1863,7 +1863,6 @@ func startHeadlessAPI(c *client.Client, f *helpers.Flags, h *CommandHandler, sor
 				if port != 5050 {
 					c.Logger.Printf("port 5050 in use, using %s instead", addr)
 				}
-				c.Logger.Printf("WEB PASSWORD: %s", webPassword)
 				if err := http.Serve(l, authMux); err != nil {
 					c.Logger.Printf("API Server error on %s: %v", addr, err)
 				}
@@ -1951,21 +1950,28 @@ func Colorize(c *client.Client, comp interface{}) string {
 
 const WebCSS = `
 	body { background: #121212; color: #e0e0e0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 20px; }
-	pre { background: #000; padding: 15px; border-radius: 5px; overflow-x: auto; white-space: pre-wrap; font-family: Consolas, monospace; border: 1px solid #333; }
+	pre { background: #000; padding: 15px; border-radius: 5px; overflow-x: auto; white-space: pre-wrap; font-family: Consolas, monospace; border: 1px solid #333; font-size: 13px; }
 	.line { margin-bottom: 2px; }
 	.ts { color: #666; margin-right: 8px; }
 	.tab-container { background: #1f1f1f; border: 1px solid #333; border-radius: 8px; overflow: hidden; }
-	.tabs { display: flex; background: #1f1f1f; border-bottom: 1px solid #333; }
-	.tab { padding: 12px 20px; cursor: pointer; border-bottom: 3px solid transparent; transition: 0.2s; color: #aaa; }
+	.tabs { display: flex; background: #1f1f1f; border-bottom: 1px solid #333; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+	.tab { padding: 12px 20px; cursor: pointer; border-bottom: 3px solid transparent; transition: 0.2s; color: #aaa; white-space: nowrap; flex-shrink: 0; }
 	.tab:hover { background: #2a2a2a; color: #fff; }
 	.tab.active { border-bottom-color: #4caf50; background: #2a2a2a; color: #fff; }
 	.content { padding: 20px; }
 	.tab-content { display: none; }
 	.tab-content.active { display: block; }
 	.controls { margin-top: 15px; display: flex; gap: 10px; }
-	input { background: #333; border: 1px solid #444; color: #fff; padding: 10px; border-radius: 4px; flex-grow: 1; }
+	input { background: #333; border: 1px solid #444; color: #fff; padding: 10px; border-radius: 4px; flex-grow: 1; font-size: 16px; }
 	button { background: #4caf50; border: none; color: #fff; padding: 10px 20px; border-radius: 4px; cursor: pointer; font-weight: bold; }
 	button:hover { background: #45a049; }
+	@media (max-width: 600px) {
+		body { padding: 10px; }
+		.tab { padding: 10px 14px; font-size: 14px; }
+		pre { font-size: 11px; padding: 10px; }
+		.controls { flex-direction: column; }
+		.controls button { width: 100%; }
+	}
 `
 
 var trueColorRegex = regexp.MustCompile(`\x1b\[38;2;(\d+);(\d+);(\d+)m`)

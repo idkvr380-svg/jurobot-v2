@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
   <title>Jurobot - Control</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -12,10 +12,11 @@
       display: flex; justify-content: center; align-items: center;
       font-family: 'Courier New', monospace;
       color: #fff;
+      -webkit-tap-highlight-color: transparent;
     }
-    .container { text-align: center; }
+    .container { text-align: center; padding: 20px; width: 100%; max-width: 500px; }
     h1 {
-      font-size: 52px;
+      font-size: clamp(32px, 12vw, 52px);
       margin-bottom: 6px;
       color: #4fc3f7;
       text-shadow: 3px 3px 0 #0d47a1;
@@ -30,7 +31,7 @@
     }
     #control-btn, #release-btn {
       padding: 22px 72px;
-      font-size: 26px;
+      font-size: clamp(18px, 5vw, 26px);
       font-family: 'Courier New', monospace;
       font-weight: bold;
       color: #fff;
@@ -40,6 +41,8 @@
       letter-spacing: 4px;
       transition: all 0.12s;
       image-rendering: pixelated;
+      width: 100%;
+      max-width: 400px;
     }
     #control-btn {
       background: linear-gradient(180deg, #4caf50, #2e7d32);
@@ -87,6 +90,10 @@
     }
     #status.error { color: #f55; }
     #status.success { color: #4caf50; }
+    @media (max-width: 480px) {
+      #control-btn, #release-btn { padding: 18px 20px; letter-spacing: 2px; }
+      .subtitle { margin-bottom: 32px; }
+    }
   </style>
 </head>
 <body>
