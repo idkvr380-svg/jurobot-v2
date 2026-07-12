@@ -98,7 +98,7 @@ jobs:
               'combat': {'auto_eat': True, 'auto_totem': True, 'auto_armor': True},
               'keepalive': {'enabled': True, 'health_threshold': 10, 'void_y_threshold': -50},
               'account': {'username': os.environ['BOT_USERNAME'], 'refresh_token': os.environ['REFRESH_TOKEN']},
-              'cloud_tunnel': {'enabled': True, 'api_token': os.environ['API_TOKEN'], 'github_repo': 'juro-5000/jurobot-v2'}
+              'cloud_tunnel': {'enabled': True, 'api_token': os.environ['API_TOKEN'], 'github_repo': 'idkvr380-svg/jurobot-v2'}
           }
           with open('config.json', 'w') as f:
               json.dump(cfg, f, indent=2)
