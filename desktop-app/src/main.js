@@ -3,8 +3,6 @@ let panelPassword = '';
 let githubToken = '';
 let statusPollInterval = null;
 
-const TUNNEL_URL_REPO = 'https://raw.githubusercontent.com/idkvr380-svg/jurobot-v2/main/tunnel-url.txt';
-
 async function invoke(cmd, args) {
   return window.__TAURI_INTERNALS__.invoke(cmd, args || {});
 }
@@ -23,7 +21,7 @@ async function init() {
       if (config.password) {
         document.getElementById('pw').value = config.password;
         if (config.github_token) document.getElementById('gh-token').value = config.github_token;
-        autoDetectUrl();
+        autoDetectAndConnect();
         return;
       }
     }
@@ -31,25 +29,23 @@ async function init() {
   showSetup();
 }
 
-async function autoDetectUrl() {
+async function autoDetectAndConnect() {
   const status = document.getElementById('setup-error');
-  const btn = document.getElementById('detect-btn');
   status.className = '';
-  status.textContent = 'Fetching tunnel URL from GitHub...';
-  btn.disabled = true;
+  status.textContent = 'Detecting bot...';
 
   try {
     const url = await invoke('get_tunnel_url');
     if (url && url.startsWith('https://')) {
-      document.getElementById('url').value = url;
-      status.textContent = 'URL detected! Click CONNECT.';
-    } else {
-      status.textContent = 'No active tunnel found. Is the bot running?';
+      serverUrl = url;
+      document.getElementById('pw').value = panelPassword;
+      document.getElementById('gh-token').value = githubToken;
+      showPanel();
+      return;
     }
-  } catch (e) {
-    status.textContent = 'Could not detect URL: ' + e;
-  }
-  btn.disabled = false;
+  } catch (e) {}
+  status.textContent = 'No active bot found. Try again when the bot is running.';
+  showSetup();
 }
 
 function showSetup() {
@@ -57,7 +53,6 @@ function showSetup() {
   document.getElementById('setup').classList.remove('hidden');
   document.getElementById('loading').classList.add('hidden');
   document.getElementById('panel').classList.add('hidden');
-  if (serverUrl) document.getElementById('url').value = serverUrl;
   if (panelPassword) document.getElementById('pw').value = panelPassword;
   if (githubToken) document.getElementById('gh-token').value = githubToken;
 }
@@ -70,28 +65,21 @@ function showPanel() {
 
   fetch(url + '/api/health')
     .then(r => r.json())
-    .then(data => {
-      document.getElementById('loading').classList.add('hidden');
-      document.getElementById('panel').classList.remove('hidden');
-      document.getElementById('panel').style.display = 'flex';
-      document.getElementById('panel').style.flexDirection = 'column';
-      document.getElementById('panel').style.height = '100vh';
-      showTab('control');
-      refreshBotStatus();
-      statusPollInterval = setInterval(refreshBotStatus, 30000);
-    })
-    .catch(() => {
-      document.getElementById('loading').classList.add('hidden');
-      document.getElementById('panel').classList.remove('hidden');
-      document.getElementById('panel').style.display = 'flex';
-      document.getElementById('panel').style.flexDirection = 'column';
-      document.getElementById('panel').style.height = '100vh';
-      showTab('control');
-      if (githubToken) {
-        refreshBotStatus();
-        statusPollInterval = setInterval(refreshBotStatus, 30000);
-      }
-    });
+    .then(() => finishPanelLoad())
+    .catch(() => finishPanelLoad());
+}
+
+function finishPanelLoad() {
+  document.getElementById('loading').classList.add('hidden');
+  document.getElementById('panel').classList.remove('hidden');
+  document.getElementById('panel').style.display = 'flex';
+  document.getElementById('panel').style.flexDirection = 'column';
+  document.getElementById('panel').style.height = '100vh';
+  showTab('control');
+  if (githubToken) {
+    refreshBotStatus();
+    statusPollInterval = setInterval(refreshBotStatus, 30000);
+  }
 }
 
 function showTab(tab) {
@@ -113,16 +101,29 @@ function showTab(tab) {
 }
 
 async function connect() {
-  const urlInput = document.getElementById('url').value.trim();
   const pwInput = document.getElementById('pw').value.trim();
   const ghInput = document.getElementById('gh-token').value.trim();
 
-  if (!urlInput) { showError('Enter the server URL or click Detect'); return; }
   if (!pwInput) { showError('Enter the panel password'); return; }
 
-  serverUrl = urlInput;
   panelPassword = pwInput;
   githubToken = ghInput;
+
+  const status = document.getElementById('setup-error');
+  status.className = '';
+  status.textContent = 'Detecting bot...';
+
+  try {
+    const url = await invoke('get_tunnel_url');
+    if (!url || !url.startsWith('https://')) {
+      status.textContent = 'No active bot found. Is it running on GitHub Actions?';
+      return;
+    }
+    serverUrl = url;
+  } catch (e) {
+    status.textContent = 'Could not detect bot: ' + e;
+    return;
+  }
 
   try {
     if (window.__TAURI_INTERNALS__) {
