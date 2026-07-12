@@ -6,5 +6,4 @@ tunnel-credentials.json
 jurobot
 web-client/node_modules/
 web-client/dist/
-web-client/in-game-dist/
 minecraft-web-client/
