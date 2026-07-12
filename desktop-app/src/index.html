@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>JuroBot Client</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Setup screen -->
+  <div id="setup" class="screen">
+    <div class="logo">JUROBOT</div>
+    <p class="subtitle">Desktop Client</p>
+    <div class="form-group">
+      <label for="url">Server URL</label>
+      <input type="text" id="url" placeholder="https://xxxx.trycloudflare.com">
+    </div>
+    <div class="form-group">
+      <label for="pw">Panel Password</label>
+      <input type="password" id="pw" placeholder="Password">
+    </div>
+    <button id="connect-btn" onclick="connect()">CONNECT</button>
+    <p id="setup-error" class="error"></p>
+  </div>
+
+  <!-- Loading screen -->
+  <div id="loading" class="screen hidden">
+    <div class="spinner"></div>
+    <p>Connecting...</p>
+  </div>
+
+  <!-- Panel screen -->
+  <div id="panel" class="screen hidden">
+    <div class="panel-bar">
+      <div class="tabs">
+        <button class="tab active" onclick="showTab('control')">Control</button>
+        <button class="tab" onclick="showTab('status')">Status</button>
+        <button class="tab" onclick="showTab('logs')">Logs</button>
+      </div>
+      <button class="settings-btn" onclick="showSetup()">Settings</button>
+    </div>
+    <iframe id="frame" src="about:blank"></iframe>
+  </div>
+
+  <script src="main.js"></script>
+</body>
+</html>
