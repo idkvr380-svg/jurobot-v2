@@ -61,13 +61,13 @@ jobs:
         if: steps.health.outputs.skip != 'true'
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
 
       - name: Build web client
         if: steps.health.outputs.skip != 'true'
         run: |
           cd web-client
-          npm install
+          npm ci --legacy-peer-deps
           npm run build
           cd ..
 
