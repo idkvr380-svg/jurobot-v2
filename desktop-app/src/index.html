@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
   <title>JuroBot Client</title>
   <link rel="stylesheet" href="style.css">
 </head>
@@ -22,6 +22,10 @@
       <label for="pw">Panel Password</label>
       <input type="password" id="pw" placeholder="Password">
     </div>
+    <div class="form-group">
+      <label for="gh-token">GitHub Token <span class="hint">(for bot control)</span></label>
+      <input type="password" id="gh-token" placeholder="ghp_xxxx">
+    </div>
     <button id="connect-btn" onclick="connect()">CONNECT</button>
     <p id="setup-error" class="error"></p>
   </div>
@@ -32,17 +36,46 @@
     <p>Connecting...</p>
   </div>
 
-  <!-- Panel screen -->
+  <!-- Main panel -->
   <div id="panel" class="screen hidden">
     <div class="panel-bar">
       <div class="tabs">
         <button class="tab active" onclick="showTab('control')">Control</button>
         <button class="tab" onclick="showTab('status')">Status</button>
         <button class="tab" onclick="showTab('logs')">Logs</button>
+        <button class="tab" onclick="showTab('bot')">Bot</button>
       </div>
       <button class="settings-btn" onclick="showSetup()">Settings</button>
     </div>
-    <iframe id="frame" src="about:blank"></iframe>
+    <div id="tab-control" class="tab-page active"><iframe id="frame-control" src="about:blank"></iframe></div>
+    <div id="tab-status" class="tab-page"><iframe id="frame-status" src="about:blank"></iframe></div>
+    <div id="tab-logs" class="tab-page"><iframe id="frame-logs" src="about:blank"></iframe></div>
+    <div id="tab-bot" class="tab-page">
+      <div class="bot-control">
+        <h2>Bot Control</h2>
+        <div id="bot-status-card" class="status-card">
+          <div class="status-row">
+            <span class="status-label">Bot Status:</span>
+            <span id="bot-state" class="status-value">Checking...</span>
+          </div>
+          <div class="status-row">
+            <span class="status-label">Workflow:</span>
+            <span id="workflow-state" class="status-value">-</span>
+          </div>
+          <div class="status-row">
+            <span class="status-label">Run:</span>
+            <span id="run-info" class="status-value">-</span>
+          </div>
+        </div>
+        <div class="bot-actions">
+          <button class="action-btn start" onclick="startBot()" id="btn-start">START BOT</button>
+          <button class="action-btn stop" onclick="stopBot()" id="btn-stop">STOP BOT</button>
+          <button class="action-btn restart" onclick="restartBot()" id="btn-restart">RESTART</button>
+        </div>
+        <p id="bot-action-status" class="action-status"></p>
+        <button class="refresh-btn" onclick="refreshBotStatus()">Refresh Status</button>
+      </div>
+    </div>
   </div>
 
   <script src="main.js"></script>

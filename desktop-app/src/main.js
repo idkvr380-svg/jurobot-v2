@@ -1,22 +1,28 @@
 let serverUrl = '';
 let panelPassword = '';
+let githubToken = '';
+let statusPollInterval = null;
 
 const TUNNEL_URL_REPO = 'https://raw.githubusercontent.com/idkvr380-svg/jurobot-v2/main/tunnel-url.txt';
+
+async function invoke(cmd, args) {
+  return window.__TAURI_INTERNALS__.invoke(cmd, args || {});
+}
 
 async function init() {
   try {
     if (window.__TAURI_INTERNALS__) {
-      const config = await window.__TAURI_INTERNALS__.invoke('get_config');
+      const config = await invoke('get_config');
+      if (config.password) panelPassword = config.password;
+      if (config.github_token) githubToken = config.github_token;
       if (config.server_url) {
         serverUrl = config.server_url;
-        panelPassword = config.password;
         showPanel();
         return;
       }
-      // If password saved but no URL, auto-detect
       if (config.password) {
-        panelPassword = config.password;
         document.getElementById('pw').value = config.password;
+        if (config.github_token) document.getElementById('gh-token').value = config.github_token;
         autoDetectUrl();
         return;
       }
@@ -33,30 +39,27 @@ async function autoDetectUrl() {
   btn.disabled = true;
 
   try {
-    const res = await fetch(TUNNEL_URL_REPO + '?_=' + Date.now());
-    if (!res.ok) throw new Error('Not found');
-    const url = (await res.text()).trim();
+    const url = await invoke('get_tunnel_url');
     if (url && url.startsWith('https://')) {
       document.getElementById('url').value = url;
-      status.className = '';
       status.textContent = 'URL detected! Click CONNECT.';
-      btn.disabled = false;
     } else {
-      throw new Error('Invalid URL');
+      status.textContent = 'No active tunnel found. Is the bot running?';
     }
   } catch (e) {
-    status.className = '';
-    status.textContent = 'Could not detect URL. Is the bot running?';
-    btn.disabled = false;
+    status.textContent = 'Could not detect URL: ' + e;
   }
+  btn.disabled = false;
 }
 
 function showSetup() {
+  clearInterval(statusPollInterval);
   document.getElementById('setup').classList.remove('hidden');
   document.getElementById('loading').classList.add('hidden');
   document.getElementById('panel').classList.add('hidden');
   if (serverUrl) document.getElementById('url').value = serverUrl;
   if (panelPassword) document.getElementById('pw').value = panelPassword;
+  if (githubToken) document.getElementById('gh-token').value = githubToken;
 }
 
 function showPanel() {
@@ -64,80 +67,183 @@ function showPanel() {
   document.getElementById('loading').classList.remove('hidden');
 
   const url = serverUrl.replace(/\/$/, '');
-  const testUrl = url + '/api/health';
 
-  fetch(testUrl)
+  fetch(url + '/api/health')
     .then(r => r.json())
     .then(data => {
-      if (data.active) {
-        loadFrame(url);
-      } else {
-        showError('Bot is not online. Is it running on GitHub Actions?');
-        showSetup();
-      }
+      document.getElementById('loading').classList.add('hidden');
+      document.getElementById('panel').classList.remove('hidden');
+      document.getElementById('panel').style.display = 'flex';
+      document.getElementById('panel').style.flexDirection = 'column';
+      document.getElementById('panel').style.height = '100vh';
+      showTab('control');
+      refreshBotStatus();
+      statusPollInterval = setInterval(refreshBotStatus, 30000);
     })
     .catch(() => {
-      showError('Cannot reach server. Check the URL and try again.');
-      showSetup();
+      document.getElementById('loading').classList.add('hidden');
+      document.getElementById('panel').classList.remove('hidden');
+      document.getElementById('panel').style.display = 'flex';
+      document.getElementById('panel').style.flexDirection = 'column';
+      document.getElementById('panel').style.height = '100vh';
+      showTab('control');
+      if (githubToken) {
+        refreshBotStatus();
+        statusPollInterval = setInterval(refreshBotStatus, 30000);
+      }
     });
-}
-
-function loadFrame(url) {
-  document.getElementById('loading').classList.add('hidden');
-  document.getElementById('panel').classList.remove('hidden');
-  document.getElementById('panel').style.display = 'flex';
-  document.getElementById('panel').style.flexDirection = 'column';
-  document.getElementById('panel').style.height = '100vh';
-
-  showTab('control');
 }
 
 function showTab(tab) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   document.querySelector(`.tab[onclick="showTab('${tab}')"]`).classList.add('active');
+  document.querySelectorAll('.tab-page').forEach(p => p.classList.remove('active'));
+  document.getElementById('tab-' + tab).classList.add('active');
 
-  const frame = document.getElementById('frame');
   const url = serverUrl.replace(/\/$/, '');
-
-  switch (tab) {
-    case 'control':
-      frame.src = url + '/client';
-      break;
-    case 'status':
-      frame.src = url + '/panel';
-      break;
-    case 'logs':
-      frame.src = url + '/logs?format=html';
-      break;
+  if (tab === 'control') {
+    document.getElementById('frame-control').src = url + '/client';
+  } else if (tab === 'status') {
+    document.getElementById('frame-status').src = url + '/panel';
+  } else if (tab === 'logs') {
+    document.getElementById('frame-logs').src = url + '/logs?format=html';
+  } else if (tab === 'bot') {
+    refreshBotStatus();
   }
 }
 
 async function connect() {
   const urlInput = document.getElementById('url').value.trim();
   const pwInput = document.getElementById('pw').value.trim();
+  const ghInput = document.getElementById('gh-token').value.trim();
 
-  if (!urlInput) {
-    showError('Enter the server URL or click Detect');
-    return;
-  }
-  if (!pwInput) {
-    showError('Enter the panel password');
-    return;
-  }
+  if (!urlInput) { showError('Enter the server URL or click Detect'); return; }
+  if (!pwInput) { showError('Enter the panel password'); return; }
 
   serverUrl = urlInput;
   panelPassword = pwInput;
+  githubToken = ghInput;
 
   try {
     if (window.__TAURI_INTERNALS__) {
-      await window.__TAURI_INTERNALS__.invoke('set_config', {
+      await invoke('set_config', {
         serverUrl: serverUrl,
-        password: panelPassword
+        password: panelPassword,
+        githubToken: githubToken,
       });
     }
   } catch (e) {}
 
   showPanel();
+}
+
+async function refreshBotStatus() {
+  if (!githubToken) {
+    document.getElementById('bot-state').textContent = 'GitHub token not set';
+    return;
+  }
+
+  try {
+    const status = await invoke('get_bot_status');
+
+    const botState = document.getElementById('bot-state');
+    if (status.online) {
+      botState.textContent = 'ONLINE';
+      botState.className = 'status-value online';
+    } else {
+      botState.textContent = 'OFFLINE';
+      botState.className = 'status-value offline';
+    }
+
+    const workflowState = document.getElementById('workflow-state');
+    if (status.run_status) {
+      workflowState.textContent = status.run_status;
+      workflowState.className = 'status-value ' + status.run_status;
+    } else {
+      workflowState.textContent = 'No runs';
+      workflowState.className = 'status-value';
+    }
+
+    const runInfo = document.getElementById('run-info');
+    if (status.run_url) {
+      runInfo.innerHTML = `<a href="${status.run_url}" target="_blank" style="color:#4fc3f7;text-decoration:none;">View Run</a>`;
+      if (status.run_conclusion) {
+        runInfo.innerHTML += ` (${status.run_conclusion})`;
+      }
+    } else {
+      runInfo.textContent = '-';
+    }
+  } catch (e) {
+    document.getElementById('bot-state').textContent = 'Error: ' + e;
+    document.getElementById('bot-state').className = 'status-value offline';
+  }
+}
+
+async function startBot() {
+  const btn = document.getElementById('btn-start');
+  const status = document.getElementById('bot-action-status');
+  btn.disabled = true;
+  status.className = 'action-status';
+  status.textContent = 'Starting bot...';
+
+  try {
+    const msg = await invoke('start_bot');
+    status.className = 'action-status success';
+    status.textContent = msg;
+    setTimeout(refreshBotStatus, 5000);
+  } catch (e) {
+    status.className = 'action-status error';
+    status.textContent = 'Error: ' + e;
+  }
+  btn.disabled = false;
+}
+
+async function stopBot() {
+  const btn = document.getElementById('btn-stop');
+  const status = document.getElementById('bot-action-status');
+  btn.disabled = true;
+  status.className = 'action-status';
+  status.textContent = 'Stopping bot...';
+
+  try {
+    const msg = await invoke('stop_bot');
+    status.className = 'action-status success';
+    status.textContent = msg;
+    setTimeout(refreshBotStatus, 5000);
+  } catch (e) {
+    status.className = 'action-status error';
+    status.textContent = 'Error: ' + e;
+  }
+  btn.disabled = false;
+}
+
+async function restartBot() {
+  const btn = document.getElementById('btn-restart');
+  const status = document.getElementById('bot-action-status');
+  btn.disabled = true;
+  status.className = 'action-status';
+  status.textContent = 'Restarting bot...';
+
+  try {
+    await invoke('stop_bot');
+    status.textContent = 'Stopped. Starting...';
+    setTimeout(async () => {
+      try {
+        const msg = await invoke('start_bot');
+        status.className = 'action-status success';
+        status.textContent = 'Restarted! ' + msg;
+        setTimeout(refreshBotStatus, 5000);
+      } catch (e) {
+        status.className = 'action-status error';
+        status.textContent = 'Stop OK but start failed: ' + e;
+      }
+      btn.disabled = false;
+    }, 3000);
+  } catch (e) {
+    status.className = 'action-status error';
+    status.textContent = 'Error: ' + e;
+    btn.disabled = false;
+  }
 }
 
 function showError(msg) {
