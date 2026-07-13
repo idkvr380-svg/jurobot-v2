@@ -200,8 +200,7 @@ async fn stop_bot(state: tauri::State<'_, AppState>) -> Result<String, String> {
     }
 }
 
-async fn find_tunnel_url(github_token: &str) -> Result<String, String> {
-    // First try tunnel-url.txt from repo (fast path)
+async fn find_tunnel_url(_github_token: &str) -> Result<String, String> {
     let ts = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
@@ -214,62 +213,14 @@ async fn find_tunnel_url(github_token: &str) -> Result<String, String> {
         .timeout(std::time::Duration::from_secs(5))
         .build()
         .map_err(|e| e.to_string())?;
-    if let Ok(resp) = client.get(&file_url).send().await {
-        if let Ok(text) = resp.text().await {
-            let url = text.trim().to_string();
-            if url.starts_with("https://") {
-                return Ok(url);
-            }
-        }
+    let resp = client.get(&file_url).send().await.map_err(|e| e.to_string())?;
+    let text = resp.text().await.map_err(|e| e.to_string())?;
+    let url = text.trim().to_string();
+    if url.starts_with("https://") {
+        Ok(url)
+    } else {
+        Err("tunnel-url.txt not found or empty".into())
     }
-
-    // Fallback: parse tunnel URL from latest in-progress workflow run logs
-    if !github_token.is_empty() {
-        let api_url = format!(
-            "https://api.github.com/repos/{}/actions/workflows/{}/runs?per_page=1&status=in_progress",
-            GITHUB_REPO, WORKFLOW_FILE
-        );
-        let gh_client = reqwest::Client::new();
-        if let Ok(resp) = gh_client
-            .get(&api_url)
-            .header("Authorization", format!("Bearer {}", github_token))
-            .header("Accept", "application/vnd.github+json")
-            .header("User-Agent", "jurobot-client")
-            .send()
-            .await
-        {
-            if let Ok(body) = resp.json::<RunsResponse>().await {
-                if let Some(run) = body.workflow_runs.first() {
-                    let logs_url = format!(
-                        "https://api.github.com/repos/{}/actions/runs/{}/logs",
-                        GITHUB_REPO, run.id
-                    );
-                    if let Ok(logs_resp) = gh_client
-                        .get(&logs_url)
-                        .header("Authorization", format!("Bearer {}", github_token))
-                        .header("Accept", "application/vnd.github+json")
-                        .header("User-Agent", "jurobot-client")
-                        .send()
-                        .await
-                    {
-                        if let Ok(logs_text) = logs_resp.text().await {
-                            for line in logs_text.lines() {
-                                if let Some(start) = line.find("https://") {
-                                    let slice = &line[start..];
-                                    if let Some(end) = slice.find(".trycloudflare.com") {
-                                        let url = &slice[..end + ".trycloudflare.com".len()];
-                                        return Ok(url.to_string());
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    Err("no active tunnel found".into())
 }
 
 #[tauri::command]

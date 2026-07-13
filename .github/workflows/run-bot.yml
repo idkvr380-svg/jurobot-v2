@@ -25,6 +25,8 @@ jobs:
   run-bot:
     runs-on: ubuntu-latest
     timeout-minutes: 360
+    permissions:
+      contents: write
     
     steps:
       - name: Check local bot health
@@ -127,29 +129,33 @@ jobs:
 
       - name: Publish tunnel URL
         if: steps.health.outputs.skip != 'true'
-        continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           CONTENT=$(base64 -w 0 tunnel-url.txt)
+          echo "Contents of tunnel-url.txt:"
+          cat tunnel-url.txt
+          echo "---"
           # Try to get existing file SHA (needed for update)
           SHA=$(gh api repos/${{ github.repository }}/contents/tunnel-url.txt --jq '.sha' 2>/dev/null || echo "")
+          echo "Existing file SHA: '$SHA'"
           if [ -z "$SHA" ]; then
-            # Create new file
+            echo "Creating new file..."
             gh api repos/${{ github.repository }}/contents/tunnel-url.txt \
               -X PUT \
               -f message="update tunnel URL" \
               -f content="$CONTENT" \
-              -f branch="main" || true
+              -f branch="main"
           else
-            # Update existing file
+            echo "Updating existing file..."
             gh api repos/${{ github.repository }}/contents/tunnel-url.txt \
               -X PUT \
               -f message="update tunnel URL" \
               -f content="$CONTENT" \
               -f sha="$SHA" \
-              -f branch="main" || true
+              -f branch="main"
           fi
+          echo "Publish done, exit code: $?"
 
       - name: Run bot
         if: steps.health.outputs.skip != 'true'
