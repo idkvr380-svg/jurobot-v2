@@ -60,7 +60,7 @@ function showPanel() {
     statusPollInterval = setInterval(refreshBotStatus, 30000);
   }
   setInterval(async () => {
-    if (!serverUrl) await detectTunnelUrl();
+    await detectTunnelUrl();
   }, 15000);
 }
 
@@ -77,9 +77,7 @@ async function showTab(tab) {
     return;
   }
 
-  if (!serverUrl) {
-    await detectTunnelUrl();
-  }
+  await detectTunnelUrl();
 
   if (!serverUrl) {
     const frame = document.getElementById('frame-' + tab);
@@ -186,6 +184,7 @@ async function startBot() {
     const msg = await invoke('start_bot');
     status.className = 'action-status success';
     status.textContent = msg;
+    serverUrl = '';
     setTimeout(async () => {
       await detectTunnelUrl();
       refreshBotStatus();
