@@ -202,14 +202,26 @@ async fn stop_bot(state: tauri::State<'_, AppState>) -> Result<String, String> {
 
 #[tauri::command]
 async fn get_tunnel_url() -> Result<String, String> {
-    let url = "https://raw.githubusercontent.com/idkvr380-svg/jurobot-v2/main/tunnel-url.txt";
+    let ts = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let url = format!(
+        "https://raw.githubusercontent.com/idkvr380-svg/jurobot-v2/main/tunnel-url.txt?t={}",
+        ts
+    );
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(10))
         .build()
         .map_err(|e| e.to_string())?;
-    let resp = client.get(url).send().await.map_err(|e| e.to_string())?;
+    let resp = client.get(&url).send().await.map_err(|e| e.to_string())?;
     let text = resp.text().await.map_err(|e| e.to_string())?;
-    Ok(text.trim().to_string())
+    let result = text.trim().to_string();
+    if result.starts_with("https://") {
+        Ok(result)
+    } else {
+        Err("no active tunnel".into())
+    }
 }
 
 fn config_path() -> std::path::PathBuf {

@@ -31,7 +31,10 @@ async function detectTunnelUrl() {
       serverUrl = url;
       return true;
     }
-  } catch (e) {}
+  } catch (e) {
+    console.log('detectTunnelUrl error:', e);
+  }
+  serverUrl = '';
   return false;
 }
 
@@ -56,6 +59,9 @@ function showPanel() {
     refreshBotStatus();
     statusPollInterval = setInterval(refreshBotStatus, 30000);
   }
+  setInterval(async () => {
+    if (!serverUrl) await detectTunnelUrl();
+  }, 15000);
 }
 
 async function showTab(tab) {
