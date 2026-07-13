@@ -23,7 +23,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; connect-src 'self' http:* https:* ws:* wss:*; img-src 'self' http:* https:* data: blob:; style-src 'self' 'unsafe-inline' http:* https:*; script-src 'self' 'unsafe-inline' http:* https:*; font-src 'self' http:* https:* data:"
+      "csp": "default-src 'self'; frame-src http: https:; connect-src 'self' http:* https:* ws:* wss:*; img-src 'self' http:* https:* data: blob:; style-src 'self' 'unsafe-inline' http:* https:*; script-src 'self' 'unsafe-inline' http:* https:*; font-src 'self' http:* https:* data:"
     }
   },
   "bundle": {
