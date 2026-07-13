@@ -3,6 +3,19 @@
   "description": "Default capabilities for JuroBot Client",
   "windows": ["main"],
   "permissions": [
-    "core:default"
+    "core:default",
+    "core:window:default",
+    "core:window:allow-close",
+    "core:event:default",
+    "core:app:default",
+    "core:path:default",
+    {
+      "identifier": "core:default",
+      "allow": [{"type": "any"}]
+    },
+    {
+      "identifier": "core:event:default",
+      "allow": [{"type": "any"}]
+    }
   ]
 }

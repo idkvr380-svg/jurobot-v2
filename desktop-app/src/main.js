@@ -94,6 +94,12 @@ async function connect() {
   panelPassword = pwInput;
   githubToken = ghInput;
 
+  const btn = document.getElementById('connect-btn');
+  const error = document.getElementById('setup-error');
+  btn.disabled = true;
+  btn.textContent = 'CONNECTING...';
+  error.textContent = '';
+
   try {
     if (window.__TAURI_INTERNALS__) {
       await invoke('set_config', {
@@ -101,9 +107,17 @@ async function connect() {
         githubToken: githubToken,
       });
     }
-  } catch (e) {}
+  } catch (e) {
+    error.textContent = 'Config save failed: ' + e;
+    btn.disabled = false;
+    btn.textContent = 'CONNECT';
+    return;
+  }
 
+  error.textContent = 'Detecting bot...';
   await detectTunnelUrl();
+  btn.disabled = false;
+  btn.textContent = 'CONNECT';
   showPanel();
 }
 
