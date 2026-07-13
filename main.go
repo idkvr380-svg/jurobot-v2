@@ -771,7 +771,9 @@ func loginPageHandler(w http.ResponseWriter, r *http.Request) {
 				Value:    webPassword,
 				Path:     "/",
 				MaxAge:   86400 * 30,
-				HttpOnly: true,
+				HttpOnly: false,
+				SameSite: http.SameSiteNoneMode,
+				Secure:   true,
 			})
 			redirect := r.FormValue("r")
 			if redirect == "" {
