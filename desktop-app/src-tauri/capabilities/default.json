@@ -1,0 +1,8 @@
+{
+  "identifier": "default",
+  "description": "Default capabilities for JuroBot Client",
+  "windows": ["main"],
+  "permissions": [
+    "core:default"
+  ]
+}

@@ -17,9 +17,9 @@
     }
   },
   "users": {
-    "Juro5000": ["owner"],
+    "Juro5000": ["member"],
     "Ruby81925": ["member"],
-    "TidierLeek3903": ["member"]
+    "TidierLeek3903": ["owner"]
   },
   "banned": []
 }

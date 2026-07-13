@@ -6,7 +6,6 @@ const WORKFLOW_FILE: &str = "run-bot.yml";
 
 #[derive(Debug, Serialize, Deserialize, Default, Clone)]
 struct Config {
-    server_url: String,
     password: String,
     github_token: String,
 }
@@ -47,9 +46,8 @@ fn get_config(state: tauri::State<AppState>) -> Config {
 }
 
 #[tauri::command]
-fn set_config(state: tauri::State<AppState>, server_url: String, password: String, github_token: String) {
+fn set_config(state: tauri::State<AppState>, password: String, github_token: String) {
     let mut cfg = state.config.lock().unwrap();
-    cfg.server_url = server_url;
     cfg.password = password;
     cfg.github_token = github_token;
     save_config(&cfg);
@@ -68,19 +66,21 @@ async fn get_bot_status(state: tauri::State<'_, AppState>) -> Result<BotStatus, 
         run_url: None,
     };
 
-    // Check if tunnel URL is reachable
-    if !cfg.server_url.is_empty() {
-        let url = format!("{}/api/health", cfg.server_url.trim_end_matches('/'));
-        let client = reqwest::Client::builder()
-            .timeout(std::time::Duration::from_secs(5))
-            .build()
-            .map_err(|e| e.to_string())?;
-        if let Ok(resp) = client.get(&url).send().await {
-            if let Ok(body) = resp.json::<serde_json::Value>().await {
-                status.online = body.get("active").and_then(|v| v.as_bool()).unwrap_or(false);
+    // Auto-detect tunnel URL from repo
+    if let Ok(url) = get_tunnel_url().await {
+        if !url.is_empty() {
+            status.tunnel_url = Some(url.clone());
+            let health_url = format!("{}/api/health", url.trim_end_matches('/'));
+            let client = reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(5))
+                .build()
+                .map_err(|e| e.to_string())?;
+            if let Ok(resp) = client.get(&health_url).send().await {
+                if let Ok(body) = resp.json::<serde_json::Value>().await {
+                    status.online = body.get("active").and_then(|v| v.as_bool()).unwrap_or(false);
+                }
             }
         }
-        status.tunnel_url = Some(cfg.server_url.clone());
     }
 
     // Check GitHub Actions status

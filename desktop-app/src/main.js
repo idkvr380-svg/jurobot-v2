@@ -13,15 +13,10 @@ async function init() {
       const config = await invoke('get_config');
       if (config.password) panelPassword = config.password;
       if (config.github_token) githubToken = config.github_token;
-      if (config.server_url) {
-        serverUrl = config.server_url;
-        showPanel();
-        return;
-      }
       if (config.password) {
         document.getElementById('pw').value = config.password;
         if (config.github_token) document.getElementById('gh-token').value = config.github_token;
-        autoDetectAndConnect();
+        showPanel();
         return;
       }
     }
@@ -29,23 +24,15 @@ async function init() {
   showSetup();
 }
 
-async function autoDetectAndConnect() {
-  const status = document.getElementById('setup-error');
-  status.className = '';
-  status.textContent = 'Detecting bot...';
-
+async function detectTunnelUrl() {
   try {
     const url = await invoke('get_tunnel_url');
     if (url && url.startsWith('https://')) {
       serverUrl = url;
-      document.getElementById('pw').value = panelPassword;
-      document.getElementById('gh-token').value = githubToken;
-      showPanel();
-      return;
+      return true;
     }
   } catch (e) {}
-  status.textContent = 'No active bot found. Try again when the bot is running.';
-  showSetup();
+  return false;
 }
 
 function showSetup() {
@@ -59,17 +46,6 @@ function showSetup() {
 
 function showPanel() {
   document.getElementById('setup').classList.add('hidden');
-  document.getElementById('loading').classList.remove('hidden');
-
-  const url = serverUrl.replace(/\/$/, '');
-
-  fetch(url + '/api/health')
-    .then(r => r.json())
-    .then(() => finishPanelLoad())
-    .catch(() => finishPanelLoad());
-}
-
-function finishPanelLoad() {
   document.getElementById('loading').classList.add('hidden');
   document.getElementById('panel').classList.remove('hidden');
   document.getElementById('panel').style.display = 'flex';
@@ -88,6 +64,17 @@ function showTab(tab) {
   document.querySelectorAll('.tab-page').forEach(p => p.classList.remove('active'));
   document.getElementById('tab-' + tab).classList.add('active');
 
+  if (tab === 'bot') {
+    refreshBotStatus();
+    return;
+  }
+
+  if (!serverUrl) {
+    const frame = document.getElementById('frame-' + tab);
+    frame.srcdoc = '<div style="display:flex;justify-content:center;align-items:center;height:100%;background:#111;color:#888;font-family:monospace;font-size:14px;">Bot not running. Start it from the Bot tab.</div>';
+    return;
+  }
+
   const url = serverUrl.replace(/\/$/, '');
   if (tab === 'control') {
     document.getElementById('frame-control').src = url + '/client';
@@ -95,8 +82,6 @@ function showTab(tab) {
     document.getElementById('frame-status').src = url + '/panel';
   } else if (tab === 'logs') {
     document.getElementById('frame-logs').src = url + '/logs?format=html';
-  } else if (tab === 'bot') {
-    refreshBotStatus();
   }
 }
 
@@ -109,32 +94,16 @@ async function connect() {
   panelPassword = pwInput;
   githubToken = ghInput;
 
-  const status = document.getElementById('setup-error');
-  status.className = '';
-  status.textContent = 'Detecting bot...';
-
-  try {
-    const url = await invoke('get_tunnel_url');
-    if (!url || !url.startsWith('https://')) {
-      status.textContent = 'No active bot found. Is it running on GitHub Actions?';
-      return;
-    }
-    serverUrl = url;
-  } catch (e) {
-    status.textContent = 'Could not detect bot: ' + e;
-    return;
-  }
-
   try {
     if (window.__TAURI_INTERNALS__) {
       await invoke('set_config', {
-        serverUrl: serverUrl,
         password: panelPassword,
         githubToken: githubToken,
       });
     }
   } catch (e) {}
 
+  await detectTunnelUrl();
   showPanel();
 }
 
@@ -191,7 +160,10 @@ async function startBot() {
     const msg = await invoke('start_bot');
     status.className = 'action-status success';
     status.textContent = msg;
-    setTimeout(refreshBotStatus, 5000);
+    setTimeout(async () => {
+      await detectTunnelUrl();
+      refreshBotStatus();
+    }, 5000);
   } catch (e) {
     status.className = 'action-status error';
     status.textContent = 'Error: ' + e;

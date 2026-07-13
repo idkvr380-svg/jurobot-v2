@@ -34,6 +34,7 @@ type Client struct {
 	// reconnection
 	MaxReconnectAttempts int
 	shouldReconnect      bool
+	forceDisconnected    bool
 
 	// TUI
 	Interactive bool
@@ -205,6 +206,7 @@ func (c *Client) EnableInput() {
 // Disconnect closes the connection. If force is true, no reconnect is attempted.
 func (c *Client) Disconnect(force bool) error {
 	c.shouldReconnect = !force
+	c.forceDisconnected = force
 	return c.TCPClient.Close()
 }
 
@@ -256,6 +258,7 @@ func (c *Client) runConnectionLoop(ctx context.Context) error {
 
 	for {
 		c.shouldReconnect = true
+		c.forceDisconnected = false
 		err := c.connectAndStartOnce(ctx)
 		if err == nil {
 			return nil
@@ -343,7 +346,9 @@ func (c *Client) connectAndStartOnce(ctx context.Context) error {
 		wire, err := c.ReadWirePacket()
 		if err != nil {
 			c.Logger.Println("read packet error:", err)
-			c.shouldReconnect = true
+			if !c.forceDisconnected {
+				c.shouldReconnect = true
+			}
 			if c.queueDone != nil {
 				close(c.queueDone)
 				c.queueDone = nil
