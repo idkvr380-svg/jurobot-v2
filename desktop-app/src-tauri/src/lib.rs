@@ -66,8 +66,8 @@ async fn get_bot_status(state: tauri::State<'_, AppState>) -> Result<BotStatus, 
         run_url: None,
     };
 
-    // Auto-detect tunnel URL from repo
-    if let Ok(url) = get_tunnel_url().await {
+    // Auto-detect tunnel URL
+    if let Ok(url) = find_tunnel_url(&cfg.github_token).await {
         if !url.is_empty() {
             status.tunnel_url = Some(url.clone());
             let health_url = format!("{}/api/health", url.trim_end_matches('/'));
@@ -200,28 +200,82 @@ async fn stop_bot(state: tauri::State<'_, AppState>) -> Result<String, String> {
     }
 }
 
-#[tauri::command]
-async fn get_tunnel_url() -> Result<String, String> {
+async fn find_tunnel_url(github_token: &str) -> Result<String, String> {
+    // First try tunnel-url.txt from repo (fast path)
     let ts = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs();
-    let url = format!(
+    let file_url = format!(
         "https://raw.githubusercontent.com/idkvr380-svg/jurobot-v2/main/tunnel-url.txt?t={}",
         ts
     );
     let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(10))
+        .timeout(std::time::Duration::from_secs(5))
         .build()
         .map_err(|e| e.to_string())?;
-    let resp = client.get(&url).send().await.map_err(|e| e.to_string())?;
-    let text = resp.text().await.map_err(|e| e.to_string())?;
-    let result = text.trim().to_string();
-    if result.starts_with("https://") {
-        Ok(result)
-    } else {
-        Err("no active tunnel".into())
+    if let Ok(resp) = client.get(&file_url).send().await {
+        if let Ok(text) = resp.text().await {
+            let url = text.trim().to_string();
+            if url.starts_with("https://") {
+                return Ok(url);
+            }
+        }
     }
+
+    // Fallback: parse tunnel URL from latest in-progress workflow run logs
+    if !github_token.is_empty() {
+        let api_url = format!(
+            "https://api.github.com/repos/{}/actions/workflows/{}/runs?per_page=1&status=in_progress",
+            GITHUB_REPO, WORKFLOW_FILE
+        );
+        let gh_client = reqwest::Client::new();
+        if let Ok(resp) = gh_client
+            .get(&api_url)
+            .header("Authorization", format!("Bearer {}", github_token))
+            .header("Accept", "application/vnd.github+json")
+            .header("User-Agent", "jurobot-client")
+            .send()
+            .await
+        {
+            if let Ok(body) = resp.json::<RunsResponse>().await {
+                if let Some(run) = body.workflow_runs.first() {
+                    let logs_url = format!(
+                        "https://api.github.com/repos/{}/actions/runs/{}/logs",
+                        GITHUB_REPO, run.id
+                    );
+                    if let Ok(logs_resp) = gh_client
+                        .get(&logs_url)
+                        .header("Authorization", format!("Bearer {}", github_token))
+                        .header("Accept", "application/vnd.github+json")
+                        .header("User-Agent", "jurobot-client")
+                        .send()
+                        .await
+                    {
+                        if let Ok(logs_text) = logs_resp.text().await {
+                            for line in logs_text.lines() {
+                                if let Some(start) = line.find("https://") {
+                                    let slice = &line[start..];
+                                    if let Some(end) = slice.find(".trycloudflare.com") {
+                                        let url = &slice[..end + ".trycloudflare.com".len()];
+                                        return Ok(url.to_string());
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Err("no active tunnel found".into())
+}
+
+#[tauri::command]
+async fn get_tunnel_url(state: tauri::State<'_, AppState>) -> Result<String, String> {
+    let cfg = state.config.lock().unwrap().clone();
+    find_tunnel_url(&cfg.github_token).await
 }
 
 fn config_path() -> std::path::PathBuf {
