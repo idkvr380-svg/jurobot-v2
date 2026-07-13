@@ -1763,12 +1763,18 @@ func startHeadlessAPI(c *client.Client, f *helpers.Flags, h *CommandHandler, sor
 
 	// ── Dynamic config for in-game client ──
 	http.HandleFunc("/client-game/config.json", func(w http.ResponseWriter, r *http.Request) {
-		proxyURL := fmt.Sprintf("http://localhost:%d", httpPort)
 		serverHost := appCfg.Server.Address
 		serverPort := appCfg.Server.Port
 		if serverPort == 0 {
 			serverPort = 25565
 		}
+		// Use the request's own origin so the proxy works through tunnels
+		proxyURL := fmt.Sprintf("%s://%s", func() string {
+			if r.TLS != nil {
+				return "https"
+			}
+			return "http"
+		}(), r.Host)
 		cfg := map[string]interface{}{
 			"version":           1,
 			"allowAutoConnect":  true,
