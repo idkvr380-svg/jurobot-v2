@@ -86,6 +86,7 @@ function showTab(tab) {
 }
 
 async function connect() {
+  alert('connect() called');
   const pwInput = document.getElementById('pw').value.trim();
   const ghInput = document.getElementById('gh-token').value.trim();
 
@@ -237,4 +238,7 @@ function showError(msg) {
   document.getElementById('setup-error').textContent = msg;
 }
 
-window.addEventListener('DOMContentLoaded', init);
+window.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('connect-btn').addEventListener('click', connect);
+  init();
+});
