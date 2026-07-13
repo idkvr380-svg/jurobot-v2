@@ -1489,6 +1489,16 @@ func startHeadlessAPI(c *client.Client, f *helpers.Flags, h *CommandHandler, sor
 			})
 			return
 		}
+
+		// Auto-takeover: disconnect bot so web client can take over
+		if !inTakeover {
+			takeoverMu.Lock()
+			inTakeover = true
+			takeoverMu.Unlock()
+			c.Logger.Printf("[TAKEOVER] Auto-disconnecting bot for web client proxy connection")
+			c.Disconnect(true)
+		}
+
 		token := fmt.Sprintf("%x", time.Now().UnixNano())
 		proxyConnsMu.Lock()
 		proxyConns[token] = conn
@@ -1500,7 +1510,20 @@ func startHeadlessAPI(c *client.Client, f *helpers.Flags, h *CommandHandler, sor
 				pc.Close()
 				delete(proxyConns, token)
 			}
+			remaining := len(proxyConns)
 			proxyConnsMu.Unlock()
+			// Auto-reconnect bot when no more proxy connections
+			if remaining == 0 {
+				takeoverMu.Lock()
+				if inTakeover {
+					inTakeover = false
+					takeoverMu.Unlock()
+					c.Logger.Printf("[RELEASE] No more proxy connections, reconnecting bot")
+					go c.ConnectAndStart(context.Background())
+				} else {
+					takeoverMu.Unlock()
+				}
+			}
 		}()
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
@@ -1672,6 +1695,21 @@ func startHeadlessAPI(c *client.Client, f *helpers.Flags, h *CommandHandler, sor
 			wsConn.Close()
 			tcpConn.Close()
 			c.Logger.Printf("[PROXY] Tunnel closed for %s", tcpConn.RemoteAddr())
+			// Auto-reconnect bot when web client disconnects
+			proxyConnsMu.Lock()
+			remaining := len(proxyConns)
+			proxyConnsMu.Unlock()
+			if remaining == 0 {
+				takeoverMu.Lock()
+				if inTakeover {
+					inTakeover = false
+					takeoverMu.Unlock()
+					c.Logger.Printf("[RELEASE] Web client disconnected, reconnecting bot")
+					go c.ConnectAndStart(context.Background())
+				} else {
+					takeoverMu.Unlock()
+				}
+			}
 		}()
 		done := make(chan struct{})
 		go func() {
