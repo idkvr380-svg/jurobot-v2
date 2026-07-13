@@ -58,7 +58,7 @@ function showPanel() {
   }
 }
 
-function showTab(tab) {
+async function showTab(tab) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   const activeTab = document.querySelector(`.tab[data-tab="${tab}"]`);
   if (activeTab) activeTab.classList.add('active');
@@ -69,6 +69,10 @@ function showTab(tab) {
   if (tab === 'bot') {
     refreshBotStatus();
     return;
+  }
+
+  if (!serverUrl) {
+    await detectTunnelUrl();
   }
 
   if (!serverUrl) {
