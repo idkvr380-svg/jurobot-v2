@@ -1955,10 +1955,10 @@ const WebCSS = `
 	.ts { color: #666; margin-right: 8px; }
 	.tab-container { background: #1f1f1f; border: 1px solid #333; border-radius: 8px; overflow: hidden; }
 	.tabs { display: flex; background: #1f1f1f; border-bottom: 1px solid #333; overflow-x: auto; -webkit-overflow-scrolling: touch; }
-	.tab { padding: 12px 20px; cursor: pointer; border-bottom: 3px solid transparent; transition: 0.2s; color: #aaa; white-space: nowrap; flex-shrink: 0; }
+	.tab { padding: 14px 28px; cursor: pointer; border-bottom: 3px solid transparent; transition: 0.2s; color: #aaa; white-space: nowrap; flex-shrink: 0; font-size: 15px; }
 	.tab:hover { background: #2a2a2a; color: #fff; }
 	.tab.active { border-bottom-color: #4caf50; background: #2a2a2a; color: #fff; }
-	.content { padding: 20px; }
+	.content { padding: 24px; }
 	.tab-content { display: none; }
 	.tab-content.active { display: block; }
 	.controls { margin-top: 15px; display: flex; gap: 10px; }
@@ -1967,8 +1967,9 @@ const WebCSS = `
 	button:hover { background: #45a049; }
 	@media (max-width: 600px) {
 		body { padding: 10px; }
-		.tab { padding: 10px 14px; font-size: 14px; }
+		.tab { padding: 10px 14px; font-size: 13px; }
 		pre { font-size: 11px; padding: 10px; }
+		.content { padding: 12px; }
 		.controls { flex-direction: column; }
 		.controls button { width: 100%; }
 	}

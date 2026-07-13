@@ -33,12 +33,12 @@
   <div id="panel" class="screen hidden">
     <div class="panel-bar">
       <div class="tabs">
-        <button class="tab active" onclick="showTab('control')">Control</button>
-        <button class="tab" onclick="showTab('status')">Status</button>
-        <button class="tab" onclick="showTab('logs')">Logs</button>
-        <button class="tab" onclick="showTab('bot')">Bot</button>
+        <button class="tab active" data-tab="control">Control</button>
+        <button class="tab" data-tab="status">Status</button>
+        <button class="tab" data-tab="logs">Logs</button>
+        <button class="tab" data-tab="bot">Bot</button>
       </div>
-      <button class="settings-btn" onclick="showSetup()">Settings</button>
+      <button class="settings-btn">Settings</button>
     </div>
     <div id="tab-control" class="tab-page active"><iframe id="frame-control" src="about:blank"></iframe></div>
     <div id="tab-status" class="tab-page"><iframe id="frame-status" src="about:blank"></iframe></div>
@@ -61,12 +61,12 @@
           </div>
         </div>
         <div class="bot-actions">
-          <button class="action-btn start" onclick="startBot()" id="btn-start">START BOT</button>
-          <button class="action-btn stop" onclick="stopBot()" id="btn-stop">STOP BOT</button>
-          <button class="action-btn restart" onclick="restartBot()" id="btn-restart">RESTART</button>
+          <button class="action-btn start" id="btn-start">START BOT</button>
+          <button class="action-btn stop" id="btn-stop">STOP BOT</button>
+          <button class="action-btn restart" id="btn-restart">RESTART</button>
         </div>
         <p id="bot-action-status" class="action-status"></p>
-        <button class="refresh-btn" onclick="refreshBotStatus()">Refresh Status</button>
+        <button class="refresh-btn">Refresh Status</button>
       </div>
     </div>
   </div>

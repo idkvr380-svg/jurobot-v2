@@ -20,7 +20,7 @@ body {
 }
 .subtitle { font-size: 13px; color: #556; margin-bottom: 32px; letter-spacing: 3px; text-transform: uppercase; }
 
-.form-group { width: 100%; max-width: 360px; margin-bottom: 16px; }
+.form-group { width: 100%; max-width: 400px; margin-bottom: 16px; }
 .form-group label { display: block; font-size: 13px; color: #888; margin-bottom: 6px; }
 .hint { color: #555; font-size: 11px; }
 .form-group input {
@@ -38,7 +38,7 @@ body {
 
 #connect-btn {
   width: 100%;
-  max-width: 360px;
+  max-width: 400px;
   padding: 14px;
   background: linear-gradient(180deg, #4caf50, #2e7d32);
   border: 2px solid #1b5e20;
@@ -72,7 +72,7 @@ body {
   justify-content: space-between;
   align-items: center;
   width: 100%;
-  padding: 8px 12px;
+  padding: 8px 16px;
   background: #1a1a2e;
   border-bottom: 1px solid #333;
   flex-shrink: 0;
@@ -80,25 +80,25 @@ body {
 }
 .tabs { display: flex; gap: 4px; -webkit-app-region: no-drag; }
 .tab {
-  padding: 6px 14px;
+  padding: 8px 20px;
   background: transparent;
   border: 1px solid #333;
   border-radius: 4px;
   color: #aaa;
   cursor: pointer;
-  font-size: 13px;
+  font-size: 14px;
   transition: all 0.15s;
 }
 .tab:hover { background: #2a2a2a; color: #fff; }
 .tab.active { background: #4fc3f7; color: #111; border-color: #4fc3f7; }
 .settings-btn {
-  padding: 6px 12px;
+  padding: 8px 16px;
   background: #333;
   border: 1px solid #444;
   border-radius: 4px;
   color: #aaa;
   cursor: pointer;
-  font-size: 12px;
+  font-size: 13px;
   -webkit-app-region: no-drag;
 }
 .settings-btn:hover { background: #444; color: #fff; }
@@ -110,43 +110,43 @@ body {
 
 /* Bot control */
 .bot-control {
-  padding: 24px;
-  max-width: 500px;
+  padding: 32px;
+  max-width: 600px;
   margin: 0 auto;
   width: 100%;
   overflow-y: auto;
 }
-.bot-control h2 { color: #4fc3f7; margin-bottom: 20px; font-size: 22px; }
+.bot-control h2 { color: #4fc3f7; margin-bottom: 24px; font-size: 26px; }
 
 .status-card {
   background: #1a1a2e;
   border: 1px solid #333;
   border-radius: 8px;
-  padding: 16px;
-  margin-bottom: 20px;
+  padding: 20px;
+  margin-bottom: 24px;
 }
 .status-row {
   display: flex;
   justify-content: space-between;
-  padding: 8px 0;
+  padding: 10px 0;
   border-bottom: 1px solid #222;
 }
 .status-row:last-child { border-bottom: none; }
-.status-label { color: #888; font-size: 14px; }
-.status-value { color: #eee; font-size: 14px; font-family: monospace; }
+.status-label { color: #888; font-size: 15px; }
+.status-value { color: #eee; font-size: 15px; font-family: monospace; }
 .status-value.online { color: #4caf50; }
 .status-value.offline { color: #f44336; }
 .status-value.running { color: #4caf50; }
 .status-value.in_progress { color: #ff9800; }
 .status-value.completed { color: #888; }
 
-.bot-actions { display: flex; gap: 10px; margin-bottom: 16px; }
+.bot-actions { display: flex; gap: 12px; margin-bottom: 20px; }
 .action-btn {
   flex: 1;
-  padding: 14px;
+  padding: 16px;
   border: 2px solid;
   border-radius: 6px;
-  font-size: 15px;
+  font-size: 16px;
   font-weight: bold;
   cursor: pointer;
   letter-spacing: 2px;
@@ -179,21 +179,21 @@ body {
 .action-btn.restart:hover { background: linear-gradient(180deg, #ffb74d, #f57c00); transform: scale(1.02); }
 
 .action-status {
-  font-size: 13px;
-  min-height: 20px;
-  margin-bottom: 12px;
+  font-size: 14px;
+  min-height: 22px;
+  margin-bottom: 14px;
 }
 .action-status.success { color: #4caf50; }
 .action-status.error { color: #f44336; }
 
 .refresh-btn {
-  padding: 8px 16px;
+  padding: 10px 20px;
   background: #333;
   border: 1px solid #444;
   border-radius: 4px;
   color: #aaa;
   cursor: pointer;
-  font-size: 12px;
+  font-size: 13px;
   width: 100%;
 }
 .refresh-btn:hover { background: #444; color: #fff; }

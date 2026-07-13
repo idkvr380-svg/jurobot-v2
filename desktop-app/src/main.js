@@ -60,9 +60,11 @@ function showPanel() {
 
 function showTab(tab) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-  document.querySelector(`.tab[onclick="showTab('${tab}')"]`).classList.add('active');
+  const activeTab = document.querySelector(`.tab[data-tab="${tab}"]`);
+  if (activeTab) activeTab.classList.add('active');
   document.querySelectorAll('.tab-page').forEach(p => p.classList.remove('active'));
-  document.getElementById('tab-' + tab).classList.add('active');
+  const page = document.getElementById('tab-' + tab);
+  if (page) page.classList.add('active');
 
   if (tab === 'bot') {
     refreshBotStatus();
@@ -71,7 +73,7 @@ function showTab(tab) {
 
   if (!serverUrl) {
     const frame = document.getElementById('frame-' + tab);
-    frame.srcdoc = '<div style="display:flex;justify-content:center;align-items:center;height:100%;background:#111;color:#888;font-family:monospace;font-size:14px;">Bot not running. Start it from the Bot tab.</div>';
+    if (frame) frame.srcdoc = '<div style="display:flex;justify-content:center;align-items:center;height:100%;background:#111;color:#888;font-family:monospace;font-size:16px;">Bot not running. Start it from the Bot tab.</div>';
     return;
   }
 
@@ -86,7 +88,6 @@ function showTab(tab) {
 }
 
 async function connect() {
-  alert('connect() called');
   const pwInput = document.getElementById('pw').value.trim();
   const ghInput = document.getElementById('gh-token').value.trim();
 
@@ -151,9 +152,9 @@ async function refreshBotStatus() {
 
     const runInfo = document.getElementById('run-info');
     if (status.run_url) {
-      runInfo.innerHTML = `<a href="${status.run_url}" target="_blank" style="color:#4fc3f7;text-decoration:none;">View Run</a>`;
+      runInfo.innerHTML = '<a href="' + status.run_url + '" target="_blank" style="color:#4fc3f7;text-decoration:none;">View Run</a>';
       if (status.run_conclusion) {
-        runInfo.innerHTML += ` (${status.run_conclusion})`;
+        runInfo.innerHTML += ' (' + status.run_conclusion + ')';
       }
     } else {
       runInfo.textContent = '-';
@@ -240,5 +241,15 @@ function showError(msg) {
 
 window.addEventListener('DOMContentLoaded', () => {
   document.getElementById('connect-btn').addEventListener('click', connect);
+  document.getElementById('btn-start').addEventListener('click', startBot);
+  document.getElementById('btn-stop').addEventListener('click', stopBot);
+  document.getElementById('btn-restart').addEventListener('click', restartBot);
+  document.querySelectorAll('.tab[data-tab]').forEach(tab => {
+    tab.addEventListener('click', () => showTab(tab.dataset.tab));
+  });
+  const settingsBtn = document.querySelector('.settings-btn');
+  if (settingsBtn) settingsBtn.addEventListener('click', showSetup);
+  const refreshBtn = document.querySelector('.refresh-btn');
+  if (refreshBtn) refreshBtn.addEventListener('click', refreshBotStatus);
   init();
 });
