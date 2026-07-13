@@ -952,6 +952,17 @@ func startHeadlessAPI(c *client.Client, f *helpers.Flags, h *CommandHandler, sor
 	authMux := http.NewServeMux()
 	authMux.HandleFunc("/login", loginPageHandler)
 	authMux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Bypass auth for API endpoints and static assets (iframes have cookie issues)
+		path := r.URL.Path
+		if strings.HasPrefix(path, "/api/vm/net/") ||
+			strings.HasPrefix(path, "/client/api/") ||
+			strings.HasPrefix(path, "/client-game/") ||
+			strings.HasPrefix(path, "/mc-assets/") ||
+			strings.HasPrefix(path, "/static/") ||
+			path == "/mesher.js" || path == "/threeWorker.js" || path == "/mesherWasm.js" {
+			http.DefaultServeMux.ServeHTTP(w, r)
+			return
+		}
 		cookie, err := r.Cookie("jurobot_auth")
 		if err != nil || cookie.Value != webPassword {
 			http.Redirect(w, r, "/login?r="+url.QueryEscape(r.URL.Path), http.StatusFound)
