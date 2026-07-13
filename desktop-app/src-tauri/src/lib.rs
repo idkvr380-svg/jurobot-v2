@@ -1,3 +1,4 @@
+use base64::Engine;
 use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
 
@@ -200,26 +201,41 @@ async fn stop_bot(state: tauri::State<'_, AppState>) -> Result<String, String> {
     }
 }
 
-async fn find_tunnel_url(_github_token: &str) -> Result<String, String> {
-    let ts = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs();
-    let file_url = format!(
-        "https://raw.githubusercontent.com/idkvr380-svg/jurobot-v2/main/tunnel-url.txt?t={}",
-        ts
+async fn find_tunnel_url(github_token: &str) -> Result<String, String> {
+    let api_url = format!(
+        "https://api.github.com/repos/{}/contents/tunnel-url.txt",
+        GITHUB_REPO
     );
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(5))
         .build()
         .map_err(|e| e.to_string())?;
-    let resp = client.get(&file_url).send().await.map_err(|e| e.to_string())?;
-    let text = resp.text().await.map_err(|e| e.to_string())?;
-    let url = text.trim().to_string();
+    let mut req = client
+        .get(&api_url)
+        .header("Accept", "application/vnd.github+json")
+        .header("User-Agent", "jurobot-client");
+    if !github_token.is_empty() {
+        req = req.header("Authorization", format!("Bearer {}", github_token));
+    }
+    let resp = req.send().await.map_err(|e| e.to_string())?;
+    let body: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
+    let content = body
+        .get("content")
+        .and_then(|v| v.as_str())
+        .ok_or("no content in response")?;
+    let decoded = String::from_utf8(
+        base64::Engine::decode(
+            &base64::engine::general_purpose::STANDARD,
+            content.replace('\n', ""),
+        )
+        .map_err(|e| e.to_string())?,
+    )
+    .map_err(|e| e.to_string())?;
+    let url = decoded.trim().to_string();
     if url.starts_with("https://") {
         Ok(url)
     } else {
-        Err("tunnel-url.txt not found or empty".into())
+        Err("tunnel-url.txt is empty".into())
     }
 }
 
