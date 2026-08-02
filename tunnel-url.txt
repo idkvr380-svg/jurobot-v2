@@ -1,1 +1,1 @@
-https://timber-track-customers-moss.trycloudflare.com
+https://api.trycloudflare.com
