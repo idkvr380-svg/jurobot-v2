@@ -1,1 +1,1 @@
-https://api.trycloudflare.com
+https://barely-brands-quantity-compliance.trycloudflare.com
